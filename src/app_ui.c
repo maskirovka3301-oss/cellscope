@@ -1409,13 +1409,20 @@ static void draw_symptom_placeholder(App *app)
 {
     Ui *ui = &app->ui;
     float w = (float)ui->win_w, h = (float)ui->view_h;
-    UiRect card = ui_rect(24, 24, w - 48, h - 48);
-    ui_panel(ui, card, UI_PANEL);
-    ui_text(ui, card.x + 28, card.y + 26, 20, UI_TEXT, "Symptom Report");
-    ui_text(ui, card.x + 28, card.y + 56, 11, UI_MUTED,
-            "The anatomical body map and symptom cards will appear here.");
-    ui_text(ui, card.x + 28, card.y + 78, 9.5f, UI_FAINT,
-            "Use Ctrl/Cmd+1 for RF Check and Ctrl/Cmd+2 for Symptom Report.");
+    float cx = w * 0.5f;
+
+    /* Inset divider: a dark groove with a faint highlight, no card/panel. */
+    ui_rect_fill(ui, ui_rect(cx - 1, 0, 2, h), UI_COLOR(4, 7, 10, 255));
+    ui_line(ui, cx - 2.5f, 0, cx - 2.5f, h, UI_COLOR(21, 30, 38, 150), 1);
+    ui_line(ui, cx + 1.5f, 0, cx + 1.5f, h, UI_COLOR(45, 59, 71, 120), 1);
+
+    ui_text(ui, 28, 30, 20, UI_TEXT, "Symptom Report");
+    ui_text(ui, 28, 62, 11, UI_MUTED,
+            "The anatomical body map will appear in this half.");
+    ui_text(ui, 28, 82, 9.5f, UI_FAINT,
+            "Symptom cards will stack in the right half.");
+    ui_text(ui, 28, h - 26, 9.5f, UI_FAINT,
+            "Ctrl/Cmd+1  RF Check     Ctrl/Cmd+2  Symptom Report");
 }
 
 void app_draw(App *app)
