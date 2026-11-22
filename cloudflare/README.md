@@ -119,7 +119,10 @@ Then:
 4. Click **Upload** after verification.
 
 The first upload enrolls the device. Later uploads are signed with the same
-device key and do not require email verification.
+device key and do not require email verification. The app uploads from a
+persistent queue, retries failures, writes a signed `manifest.json` into each
+archive, and can reset/revoke the device identity. On macOS the key lives in
+Keychain; Windows uses DPAPI; Linux uses a 0600 file.
 
 ## Security properties
 

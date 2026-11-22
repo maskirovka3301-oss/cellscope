@@ -66,6 +66,10 @@ function canonicalUpload(body: any): string {
     String(body.issued_at)].join("\n");
 }
 
+function canonicalRevoke(body: any): string {
+  return ["cellscope-v1", "revoke", body.device_id, body.nonce, String(body.issued_at)].join("\n");
+}
+
 function canonicalComplete(body: any): string {
   return ["cellscope-v1", "complete", body.device_id, body.upload_id, body.archive_sha512,
     String(body.archive_size), String(body.sig_size), body.nonce, String(body.issued_at)].join("\n");
@@ -353,6 +357,22 @@ async function completeUpload(request: Request, env: Env, uploadId: string): Pro
   return json({ status: "accepted" });
 }
 
+async function revokeDevice(request: Request, env: Env): Promise<Response> {
+  const body = await request.json<any>().catch(() => null);
+  if (!body || !validId(body.device_id) || !validId(body.nonce) || !fresh(body.issued_at))
+    return bad("invalid revoke request");
+  const device = await env.DB.prepare("SELECT public_key, status FROM devices WHERE device_id = ?")
+    .bind(body.device_id).first<any>();
+  if (!device) return bad("device not found", 404);
+  if (!await verifyDeviceSignature(device.public_key, body.signature, canonicalRevoke(body)))
+    return bad("invalid device signature", 401);
+  if (!await consumeNonce(env.DB, body.device_id, body.nonce))
+    return bad("nonce already used", 409);
+  await env.DB.prepare("UPDATE devices SET status = 'revoked' WHERE device_id = ?")
+    .bind(body.device_id).run();
+  return json({ status: "revoked" });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -363,6 +383,7 @@ export default {
     if (url.pathname.startsWith("/v1/device/") && request.method === "GET")
       return deviceStatus(request, env, url.pathname.slice("/v1/device/".length));
     if (url.pathname === "/v1/uploads" && request.method === "POST") return createUpload(request, env);
+    if (url.pathname === "/v1/device/revoke" && request.method === "POST") return revokeDevice(request, env);
     if (url.pathname.startsWith("/v1/uploads/")) {
       const id = url.pathname.slice("/v1/uploads/".length);
       if (id.endsWith("/complete") && request.method === "POST")

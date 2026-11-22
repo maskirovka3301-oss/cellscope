@@ -138,9 +138,17 @@ and no cloud inference. Images are not uploaded during capture or analysis.
 Uploads use the optional Cloudflare Worker + D1 + Brevo + Backblaze B2 backend
 in [`cloudflare/`](cloudflare/README.md). The device enrolls by email once; every
 later upload is signed with the device's Ed25519 key and uses a single-object
-180-second B2 PUT URL. The B2 credentials never enter the app. The one-time
-runtime/model downloads come from uv's GitHub releases, ModelScope, and Hugging
-Face if you download an HF model.
+180-second B2 PUT URL. The B2 credentials never enter the app.
+
+Uploads run through a persistent background queue: progress and failures appear
+in the Upload dialog, pending jobs retry after restart, and empty datasets are
+refused before compression. Exported archives include a signed `manifest.json`
+with capture counts, platform, timestamp and git commit. The device key is stored
+in macOS Keychain or Windows DPAPI; Linux uses a 0600 file. Set
+`CELLSCOPE_DISABLE_KEYCHAIN=1` only for headless tests. **Reset identity** revokes
+the server-side device and deletes the local key so the next enrollment creates a
+new identity. The one-time runtime/model downloads come from uv's GitHub releases,
+ModelScope, and Hugging Face if you download an HF model.
 
 
 ## Stack

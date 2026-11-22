@@ -333,6 +333,7 @@ void app_open_upload_modal(App *app);
 void app_close_upload_modal(App *app);
 void app_upload_dataset(App *app);
 void app_enroll_device(App *app);
+void app_reset_identity(App *app);
 void app_open_model_modal(App *app);
 void app_close_model_modal(App *app);
 void app_select_hf_model(App *app, int index);

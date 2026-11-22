@@ -669,6 +669,19 @@ void app_upload_dataset(App *app)
     (void)api;
 }
 
+void app_reset_identity(App *app)
+{
+    char api[512], message[512] = {0};
+    SDL_LockMutex(app->mu);
+    cs_strlcpy(api, app->settings.upload_api_url, sizeof(api));
+    SDL_UnlockMutex(app->mu);
+    bool ok = cloud_reset_identity(api, message, sizeof(message));
+    SDL_LockMutex(app->mu);
+    cs_strlcpy(app->upload_status, message, sizeof(app->upload_status));
+    SDL_UnlockMutex(app->mu);
+    app_notify(app, !ok, "%s", message);
+}
+
 void app_open_upload_modal(App *app)
 {
     SDL_LockMutex(app->mu);

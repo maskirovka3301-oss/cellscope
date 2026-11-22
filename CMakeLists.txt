@@ -114,6 +114,11 @@ target_link_libraries(cellscope PRIVATE
   PkgConfig::SODIUM
   Threads::Threads
 )
+if(APPLE)
+  target_link_libraries(cellscope PRIVATE "-framework Security")
+elseif(WIN32)
+  target_link_libraries(cellscope PRIVATE crypt32)
+endif()
 target_include_directories(cellscope PRIVATE
   src
   third_party

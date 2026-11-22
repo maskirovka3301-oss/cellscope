@@ -26,7 +26,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 
 for mode in main live best settings upload model remove; do
-    "$APP" --autoplay --image "$IMAGE" --readme-fixture "$mode" \
+    CELLSCOPE_DISABLE_KEYCHAIN=1 "$APP" --autoplay --image "$IMAGE" --readme-fixture "$mode" \
         --screenshot "$OUT/$mode.png" --screenshot-delay 1200 --run-ms 3000 \
         --no-modal --no-runtime --capture-dir "$OUT/capture-$mode" >/dev/null 2>&1 || {
         echo "FAILED: $mode" >&2
@@ -36,7 +36,7 @@ for mode in main live best settings upload model remove; do
     echo "ok $mode -> $OUT/$mode.png"
 done
 
-CELLSCOPE_START_PAUSED=1 "$APP" --no-camera --no-modal --relaunched --no-runtime \
+CELLSCOPE_DISABLE_KEYCHAIN=1 CELLSCOPE_START_PAUSED=1 "$APP" --no-camera --no-modal --relaunched --no-runtime \
     --screenshot "$OUT/paused.png" --screenshot-delay 900 --run-ms 1600 \
     --capture-dir "$OUT/capture-paused" >/dev/null 2>&1 || {
     echo "FAILED: paused" >&2
@@ -49,7 +49,7 @@ echo "ok paused -> $OUT/paused.png"
 # The main fixture seeds simulated ADB samples and readings, presents
 # docs/example.png as a live webcam, and mirrors its 2526.5744 MHz reading in
 # LIVE DETECTION.
-"$APP" --autoplay --image "$IMAGE" --readme-fixture main \
+CELLSCOPE_DISABLE_KEYCHAIN=1 "$APP" --autoplay --image "$IMAGE" --readme-fixture main \
     --screenshot "$ROOT/docs/screenshot-main.png" --screenshot-delay 1200 --run-ms 3000 \
     --no-modal --no-runtime --capture-dir "$OUT/capture-readme" >/dev/null 2>&1 || {
     echo "FAILED: README screenshot" >&2

@@ -13,6 +13,16 @@
 
 #include "util.h"
 
+#if defined(__APPLE__)
+#include <Security/Security.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <wincrypt.h>
+#endif
+
+#define DEVICE_SERVICE "com.cellscope.device"
+#define DEVICE_ACCOUNT "ed25519"
+
 #define CLOUD_MAX_RESPONSE (1024 * 1024)
 
 typedef struct {
@@ -52,6 +62,181 @@ static bool key_path(char *out, size_t cap, const char *name)
     return true;
 }
 
+static bool read_legacy_key(const char *path, unsigned char sk[crypto_sign_SECRETKEYBYTES],
+                            unsigned char pk[crypto_sign_PUBLICKEYBYTES])
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    unsigned char raw[crypto_sign_SECRETKEYBYTES + crypto_sign_PUBLICKEYBYTES];
+    size_t n = fread(raw, 1, sizeof(raw), f);
+    fclose(f);
+    if (n == crypto_sign_SECRETKEYBYTES || n == sizeof(raw)) {
+        memcpy(sk, raw, crypto_sign_SECRETKEYBYTES);
+        if (n == crypto_sign_SECRETKEYBYTES)
+            memcpy(pk, sk + crypto_sign_SECRETKEYBYTES - crypto_sign_PUBLICKEYBYTES,
+                   crypto_sign_PUBLICKEYBYTES);
+        else
+            memcpy(pk, raw + crypto_sign_SECRETKEYBYTES, crypto_sign_PUBLICKEYBYTES);
+        return true;
+    }
+    return false;
+}
+
+static bool write_legacy_key(const char *path, const unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+#ifdef _WIN32
+    FILE *f = fopen(path, "wb");
+#else
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    FILE *f = fd >= 0 ? fdopen(fd, "wb") : NULL;
+#endif
+    if (!f) return false;
+    fwrite(sk, 1, crypto_sign_SECRETKEYBYTES, f);
+    bool ok = fclose(f) == 0;
+    if (!ok) return false;
+#if !defined(_WIN32)
+    chmod(path, 0600);
+#endif
+    return true;
+}
+
+static bool delete_legacy_key(const char *path)
+{
+#if defined(_WIN32)
+    return DeleteFileA(path) != 0;
+#else
+    return unlink(path) == 0;
+#endif
+}
+
+#if defined(__APPLE__)
+static bool keychain_load(unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+    CFMutableDictionaryRef query = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
+    CFDictionaryAddValue(query, kSecAttrService, CFSTR(DEVICE_SERVICE));
+    CFDictionaryAddValue(query, kSecAttrAccount, CFSTR(DEVICE_ACCOUNT));
+    CFDictionaryAddValue(query, kSecReturnData, kCFBooleanTrue);
+    CFDictionaryAddValue(query, kSecMatchLimit, kSecMatchLimitOne);
+    CFTypeRef result = NULL;
+    OSStatus st = SecItemCopyMatching(query, &result);
+    CFRelease(query);
+    bool ok = false;
+    if (st == errSecSuccess && result && CFGetTypeID(result) == CFDataGetTypeID() &&
+        CFDataGetLength((CFDataRef)result) == crypto_sign_SECRETKEYBYTES) {
+        memcpy(sk, CFDataGetBytePtr((CFDataRef)result), crypto_sign_SECRETKEYBYTES);
+        ok = true;
+    }
+    if (result) CFRelease(result);
+    return ok;
+}
+
+static bool keychain_save(const unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+    CFMutableDictionaryRef query = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
+    CFDictionaryAddValue(query, kSecAttrService, CFSTR(DEVICE_SERVICE));
+    CFDictionaryAddValue(query, kSecAttrAccount, CFSTR(DEVICE_ACCOUNT));
+    SecItemDelete(query);
+    CFDataRef data = CFDataCreate(NULL, sk, crypto_sign_SECRETKEYBYTES);
+    CFDictionaryAddValue(query, kSecValueData, data);
+    CFDictionaryAddValue(query, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlock);
+    OSStatus st = SecItemAdd(query, NULL);
+    CFRelease(data);
+    CFRelease(query);
+    return st == errSecSuccess;
+}
+
+static bool keychain_delete(void)
+{
+    CFMutableDictionaryRef query = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
+    CFDictionaryAddValue(query, kSecAttrService, CFSTR(DEVICE_SERVICE));
+    CFDictionaryAddValue(query, kSecAttrAccount, CFSTR(DEVICE_ACCOUNT));
+    OSStatus st = SecItemDelete(query);
+    CFRelease(query);
+    return st == errSecSuccess || st == errSecItemNotFound;
+}
+#elif defined(_WIN32)
+static bool dpapi_load(const char *path, unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    rewind(f);
+    if (n <= 0 || n > 4096) { fclose(f); return false; }
+    unsigned char *buf = malloc((size_t)n);
+    if (!buf) { fclose(f); return false; }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    DATA_BLOB in = {(DWORD)got, buf}, out = {0};
+    bool ok = CryptUnprotectData(&in, NULL, NULL, NULL, NULL, 0, &out) &&
+              out.cbData == crypto_sign_SECRETKEYBYTES;
+    if (ok) memcpy(sk, out.pbData, crypto_sign_SECRETKEYBYTES);
+    if (out.pbData) LocalFree(out.pbData);
+    free(buf);
+    return ok;
+}
+
+static bool dpapi_save(const char *path, const unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+    DATA_BLOB in = {crypto_sign_SECRETKEYBYTES, (BYTE *)sk}, out = {0};
+    if (!CryptProtectData(&in, L"CellScope device identity", NULL, NULL, NULL, 0, &out))
+        return false;
+    FILE *f = fopen(path, "wb");
+    bool ok = f != NULL;
+    if (f) {
+        ok = fwrite(out.pbData, 1, out.cbData, f) == out.cbData;
+        if (fclose(f) != 0) ok = false;
+    }
+    LocalFree(out.pbData);
+    return ok;
+}
+#endif
+
+static bool secure_key_load(const char *path, unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+    (void)path;
+    if (getenv("CELLSCOPE_DISABLE_KEYCHAIN")) return false;
+#if defined(__APPLE__)
+    return keychain_load(sk);
+#elif defined(_WIN32)
+    return dpapi_load(path, sk);
+#else
+    (void)path;
+    return false;
+#endif
+}
+
+static bool secure_key_save(const char *path, const unsigned char sk[crypto_sign_SECRETKEYBYTES])
+{
+    if (getenv("CELLSCOPE_DISABLE_KEYCHAIN")) return write_legacy_key(path, sk);
+#if defined(__APPLE__)
+    if (keychain_save(sk)) return true;
+    return write_legacy_key(path, sk);
+#elif defined(_WIN32)
+    return dpapi_save(path, sk);
+#else
+    return write_legacy_key(path, sk);
+#endif
+}
+
+static void secure_key_delete(const char *path)
+{
+#if defined(__APPLE__)
+    keychain_delete();
+    delete_legacy_key(path);
+#elif defined(_WIN32)
+    delete_legacy_key(path);
+#else
+    delete_legacy_key(path);
+#endif
+}
+
 static bool load_or_create_keys(unsigned char pk[crypto_sign_PUBLICKEYBYTES],
                                 unsigned char sk[crypto_sign_SECRETKEYBYTES],
                                 char *err, size_t cap)
@@ -61,42 +246,30 @@ static bool load_or_create_keys(unsigned char pk[crypto_sign_PUBLICKEYBYTES],
         snprintf(err, cap, "Could not determine the device key directory");
         return false;
     }
-    FILE *f = fopen(path, "rb");
-    if (f) {
-        unsigned char raw[crypto_sign_SECRETKEYBYTES + crypto_sign_PUBLICKEYBYTES];
-        size_t n = fread(raw, 1, sizeof(raw), f);
-        fclose(f);
-        if (n == crypto_sign_SECRETKEYBYTES) {
-            /* libsodium secret keys are seed || public key. */
-            memcpy(sk, raw, crypto_sign_SECRETKEYBYTES);
-            memcpy(pk, sk + crypto_sign_SECRETKEYBYTES - crypto_sign_PUBLICKEYBYTES,
-                   crypto_sign_PUBLICKEYBYTES);
-            return true;
+    if (secure_key_load(path, sk)) {
+        memcpy(pk, sk + crypto_sign_SECRETKEYBYTES - crypto_sign_PUBLICKEYBYTES,
+               crypto_sign_PUBLICKEYBYTES);
+        return true;
+    }
+    if (read_legacy_key(path, sk, pk)) {
+        if (secure_key_save(path, sk)) {
+#if !defined(_WIN32) && !defined(__APPLE__)
+            /* secure save wrote the same file */
+#else
+            delete_legacy_key(path);
+#endif
         }
-        if (n == sizeof(raw)) {
-            memcpy(sk, raw, crypto_sign_SECRETKEYBYTES);
-            memcpy(pk, raw + crypto_sign_SECRETKEYBYTES, crypto_sign_PUBLICKEYBYTES);
-            return true;
-        }
+        return true;
     }
     if (crypto_sign_keypair(pk, sk) != 0) {
         snprintf(err, cap, "Could not generate the device key");
         return false;
     }
-#ifdef _WIN32
-    f = fopen(path, "wb");
-#else
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    f = fd >= 0 ? fdopen(fd, "wb") : NULL;
-#endif
-    if (!f) {
-        snprintf(err, cap, "Could not write the device key");
+    if (!secure_key_save(path, sk)) {
+        snprintf(err, cap, "Could not store the device key securely");
         return false;
     }
-    fwrite(sk, 1, crypto_sign_SECRETKEYBYTES, f);
-    bool ok = fclose(f) == 0;
-    if (!ok) snprintf(err, cap, "Could not finish writing the device key");
-    return ok;
+    return true;
 }
 
 static void hex(const unsigned char *src, size_t n, char *out, size_t cap)
@@ -496,4 +669,52 @@ bool cloud_upload_archive(const char *api_base, const char *archive_path,
     api_failure(message, message_cap, "POST", url, code, response);
     free(response);
     return false;
+}
+
+bool cloud_reset_identity(const char *api_base, char *message, size_t message_cap)
+{
+    char err[512] = {0};
+    if (!cloud_ready(err, sizeof(err))) {
+        snprintf(message, message_cap, "%s", err);
+        return false;
+    }
+    char path[CS_PATH_MAX];
+    key_path(path, sizeof(path), "cloud-device.key");
+    unsigned char pk[crypto_sign_PUBLICKEYBYTES], sk[crypto_sign_SECRETKEYBYTES];
+    if (!load_or_create_keys(pk, sk, err, sizeof(err))) {
+        snprintf(message, message_cap, "%s", err);
+        return false;
+    }
+    char device_id[128], nonce[64], issued[32], canonical[1024], signature[128];
+    hex(pk, 16, device_id, sizeof(device_id));
+    random_hex(16, nonce, sizeof(nonce));
+    snprintf(issued, sizeof(issued), "%lld", (long long)(cs_epoch_ms() / 1000));
+    snprintf(canonical, sizeof(canonical), "cellscope-v1\nrevoke\n%s\n%s\n%s",
+             device_id, nonce, issued);
+    unsigned char sig[crypto_sign_BYTES];
+    unsigned long long sig_len = 0;
+    if (crypto_sign_detached(sig, &sig_len, (const unsigned char *)canonical,
+                             strlen(canonical), sk) != 0) {
+        snprintf(message, message_cap, "Could not sign identity reset");
+        return false;
+    }
+    b64(sig, (size_t)sig_len, signature, sizeof(signature));
+    char body[2048], url[CS_PATH_MAX];
+    snprintf(body, sizeof(body),
+             "{\"device_id\":\"%s\",\"nonce\":\"%s\",\"issued_at\":%s,"
+             "\"signature\":\"%s\"}", device_id, nonce, issued, signature);
+    if (api_base && api_base[0]) {
+        api_join(url, sizeof(url), api_base, "/v1/device/revoke");
+        char *response = NULL;
+        long code = http_json("POST", url, body, &response, err, sizeof(err));
+        if (code != 200) {
+            api_failure(message, message_cap, "POST", url, code, response);
+            free(response);
+            return false;
+        }
+        free(response);
+    }
+    secure_key_delete(path);
+    snprintf(message, message_cap, "Device identity revoked; a new identity will be created on next enrollment.");
+    return true;
 }
