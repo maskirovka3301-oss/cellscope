@@ -145,6 +145,7 @@ float ui_text_wrapped_max(Ui *ui, float x, float y, float w, float size, UiColor
                           float line_gap, int max_lines, const char *text);
 
 bool ui_button(Ui *ui, UiRect r, const char *label, UiButtonKind kind, bool enabled);
+bool ui_hit(Ui *ui, UiRect r);
 bool ui_hover(Ui *ui, UiRect r);
 void ui_consume_click(Ui *ui);
 

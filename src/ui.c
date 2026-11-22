@@ -573,10 +573,15 @@ float ui_text_wrapped(Ui *ui, float x, float y, float w, float size, UiColor c,
     return ui_text_wrapped_max(ui, x, y, w, size, c, line_gap, 0, text);
 }
 
+bool ui_hit(Ui *ui, UiRect r)
+{
+    return ui_rect_contains(r, ui->mx, ui->my - ui->origin_y);
+}
+
 bool ui_hover(Ui *ui, UiRect r)
 {
     if (ui->block_interactive) return false;
-    bool hit = ui_rect_contains(r, ui->mx, ui->my - ui->origin_y);
+    bool hit = ui_hit(ui, r);
     if (hit) ui->hand_cursor = true;
     return hit;
 }

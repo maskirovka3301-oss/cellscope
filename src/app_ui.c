@@ -143,7 +143,7 @@ static void draw_transport(App *app, UiState *s)
     Ui *ui = &app->ui;
     float cx = (float)ui->win_w / 2.0f;
     UiRect btn = ui_rect(cx - 22, 9, 44, 44);
-    bool hover = ui_rect_contains(btn, ui->mx, ui->my);
+    bool hover = ui_hover(ui, btn);
     UiColor ring = s->paused ? UI_AMBER : UI_ACCENT;
     ui_circle(ui, btn.x + 22, btn.y + 22, 22, ring);
     ui_circle(ui, btn.x + 22, btn.y + 22, 20.5f,
@@ -156,7 +156,7 @@ static void draw_transport(App *app, UiState *s)
         ui_round_rect(ui, ui_rect(cx - 7, btn.y + 15, 5, 15), 1.5f, UI_TEXT);
         ui_round_rect(ui, ui_rect(cx + 2, btn.y + 15, 5, 15), 1.5f, UI_TEXT);
     }
-    if (!ui->block_interactive && hover && ui->mouse_pressed) {
+    if (hover && ui->mouse_pressed) {
         app_toggle_pause(app);
         ui_consume_click(ui);
     }
@@ -623,8 +623,8 @@ static void list_scrollbar_v(Ui *ui, UiRect track, float scroll, float content, 
     float ty = track.y + (track.h - th) * t;
     UiRect thumb = ui_rect(track.x, ty, track.w, th);
     ui_round_rect(ui, thumb, track.w / 2, UI_COLOR(92, 116, 136, 230));
-    if (ui->mouse_pressed && ui_rect_contains(track, ui->mx, ui->my)) {
-        float nt = (ui->my - track.y - th / 2) / CS_MAX(1.0f, track.h - th);
+    if (ui->mouse_pressed && ui_hit(ui, track)) {
+        float nt = (ui->my - ui->origin_y - track.y - th / 2) / CS_MAX(1.0f, track.h - th);
         if (nt < 0) nt = 0;
         if (nt > 1) nt = 1;
         *out_scroll = nt * max_scroll;
@@ -643,7 +643,7 @@ static void list_scrollbar_h(Ui *ui, UiRect track, float scroll, float content, 
     float tx = track.x + (track.w - tw) * t;
     UiRect thumb = ui_rect(tx, track.y, tw, track.h);
     ui_round_rect(ui, thumb, track.h / 2, UI_COLOR(92, 116, 136, 230));
-    if (ui->mouse_pressed && ui_rect_contains(track, ui->mx, ui->my)) {
+    if (ui->mouse_pressed && ui_hit(ui, track)) {
         float nt = (ui->mx - track.x - tw / 2) / CS_MAX(1.0f, track.w - tw);
         if (nt < 0) nt = 0;
         if (nt > 1) nt = 1;
@@ -700,7 +700,7 @@ static void draw_cell_rows(App *app, UiState *s, UiRect body)
     float max_y = CS_MAX(0.0f, content_h - view_h);
     float max_x = CS_MAX(0.0f, content_w - view_w);
     if (app->cell_follow) app->cell_scroll = floorf(max_y / row_h) * row_h;
-    if (ui_rect_contains(body, ui->mx, ui->my) && ui->wheel != 0) {
+    if (ui_hit(ui, body) && ui->wheel != 0) {
         if ((SDL_GetModState() & SDL_KMOD_SHIFT) && has_h)
             app->cell_scroll_x -= ui->wheel * 42.0f;
         else
@@ -736,7 +736,7 @@ static void draw_cell_rows(App *app, UiState *s, UiRect body)
         CellSample c = app_cell_at(app, i);
         bool newest = (i == count - 1);
         UiRect row = ui_rect(view.x, y, view.w, row_h - 1);
-        if (ui_rect_contains(row, ui->mx, ui->my))
+        if (ui_hit(ui, row))
             ui_rect_fill(ui, row, UI_COLOR(25, 37, 48, 190));
         else if (i % 2 == 0)
             ui_rect_fill(ui, row, UI_COLOR(14, 21, 28, 120));
@@ -852,7 +852,7 @@ static void draw_meter_rows(App *app, UiState *s, UiRect body)
     float max_y = CS_MAX(0.0f, content_h - view_h);
     float max_x = CS_MAX(0.0f, content_w - view_w);
     if (app->meter_follow) app->meter_scroll = floorf(max_y / row_h) * row_h;
-    if (ui_rect_contains(body, ui->mx, ui->my) && ui->wheel != 0) {
+    if (ui_hit(ui, body) && ui->wheel != 0) {
         if ((SDL_GetModState() & SDL_KMOD_SHIFT) && has_h)
             app->meter_scroll_x -= ui->wheel * 42.0f;
         else
@@ -895,7 +895,7 @@ static void draw_meter_rows(App *app, UiState *s, UiRect body)
         bool selected = (app->selected_meter_ts == m.ts_ms);
         UiRect row = ui_rect(view.x, y, view.w, row_h - 1);
         if (selected) ui_rect_fill(ui, row, UI_COLOR(30, 45, 56, 220));
-        else if (ui_rect_contains(row, ui->mx, ui->my))
+        else if (ui_hit(ui, row))
             ui_rect_fill(ui, row, UI_COLOR(25, 37, 48, 190));
         else if (i % 2 == 0)
             ui_rect_fill(ui, row, UI_COLOR(14, 21, 28, 120));
@@ -908,7 +908,7 @@ static void draw_meter_rows(App *app, UiState *s, UiRect body)
         const char *shot = ui_shot_name(&m);
         float x = view.x + 8 - app->meter_scroll_x;
         UiRect del = ui_rect(x + 1, row.y + 5, 16, 16);
-        bool del_hover = ui_rect_contains(del, ui->mx, ui->my);
+        bool del_hover = ui_hit(ui, del);
         ui_round_rect(ui, del, 4, del_hover ? UI_COLOR(93, 40, 44, 255)
                                             : UI_COLOR(24, 32, 40, 210));
         ui_text_center(ui, FONT_MONO, del.x + del.w / 2, del.y + 2.5f, 10.0f,
@@ -936,7 +936,7 @@ static void draw_meter_rows(App *app, UiState *s, UiRect body)
         ui_text_ellipsis(ui, FONT_MONO, x, row.y + 8, 8.2f, UI_FAINT,
                          cols[5].width - 10, m.backend[0] ? m.backend : "reader");
 
-        if (ui_rect_contains(row, ui->mx, ui->my) && ui->mouse_pressed) {
+        if (ui_hit(ui, row) && ui->mouse_pressed) {
             app->selected_meter_ts = m.ts_ms;
             app->selected_meter = i;
             if (m.path[0]) app_notify(app, false, "Captured image: %s", m.path);
@@ -1201,7 +1201,7 @@ static void draw_settings_modal(App *app, UiState *s)
         ui_text_ellipsis(ui, FONT_MONO, input.x + 9, input.y + 8, 9.0f,
                          focus ? UI_TEXT : UI_MUTED, input.w - 18,
                          app->settings_edit[i]);
-        if (ui_rect_contains(input, ui->mx, ui->my) && ui->mouse_pressed) {
+        if (ui_hit(ui, input) && ui->mouse_pressed) {
             app->settings_focus = i;
             ui_consume_click(ui);
         }
@@ -1248,7 +1248,7 @@ static void draw_model_modal(App *app, UiState *s)
     for (int i = 0; i < app->model_count && shown < 12; i++, shown++) {
         bool current = strcmp(app->model_paths[i], app->settings.hf_model_path) == 0;
         UiRect row = ui_rect(card.x + 20, y, card.w - 40, 36);
-        bool hover = ui_rect_contains(row, ui->mx, ui->my);
+        bool hover = ui_hit(ui, row);
         ui_round_rect(ui, row, 7,
                       current ? UI_COLOR(25, 49, 41, 235)
                               : hover ? UI_COLOR(26, 37, 48, 220)
