@@ -284,6 +284,12 @@ typedef struct App {
     int symptom_scroll;
     SymptomCard symptom_cards[SYMPTOM_MAX_CARDS];
     int symptom_card_count;
+    bool anatomy_downloading;
+    bool anatomy_ready;
+    bool anatomy_failed;
+    int anatomy_percent;
+    char anatomy_status[256];
+    SDL_Thread *anatomy_thread;
     bool session_active;
     bool session_write_failed;
     bool silent_export;

@@ -1,5 +1,6 @@
 #include "app.h"
 #include "cloud.h"
+#include "anatomy_assets.h"
 
 #include <ctype.h>
 #include <math.h>
@@ -692,6 +693,7 @@ void app_set_tab(App *app, int tab)
     SDL_LockMutex(app->mu);
     bool leaving_rf = app->active_tab == APP_TAB_RF && tab != APP_TAB_RF;
     app->active_tab = tab;
+    bool start_anatomy = tab == APP_TAB_SYMPTOM;
     if (leaving_rf) {
         app->modal_open = false;
         app->modal_checking = false;
@@ -699,6 +701,7 @@ void app_set_tab(App *app, int tab)
         app->model_modal_open = false;
     }
     SDL_UnlockMutex(app->mu);
+    if (start_anatomy) anatomy_assets_start(app);
 }
 
 int app_get_tab(App *app)
@@ -1727,6 +1730,7 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
     app->tracker = (MeterTracker){0};
     meter_tracker_init(&app->tracker);
     if (app->readme_fixture) readme_fixture_seed(app);
+    if (app->active_tab == APP_TAB_SYMPTOM) anatomy_assets_start(app);
     if (app->paused) {
         SDL_LockMutex(app->mu);
         cs_strlcpy(app->reader.status, "Press play to begin capture",
@@ -1813,6 +1817,7 @@ void app_shutdown(App *app)
         SDL_WaitThread(app->vlm_thread, NULL);
         app->vlm_thread = NULL;
     }
+    if (app->anatomy_thread) anatomy_assets_shutdown(app);
     if (app->upload_thread) {
         SDL_WaitThread(app->upload_thread, NULL);
         app->upload_thread = NULL;
