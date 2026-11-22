@@ -7,6 +7,13 @@
 #include "gpu_renderer.h"
 
 typedef struct Anatomy3D Anatomy3D;
+
+typedef struct {
+    char code[16];
+    float x, y, z;
+    float u, v;
+    char region[32];
+} AnatomyPick;
 typedef struct App App;
 
 Anatomy3D *anatomy_3d_create(App *app);
@@ -15,5 +22,6 @@ bool anatomy_3d_available(const Anatomy3D *a);
 GpuTexture *anatomy_3d_texture(const Anatomy3D *a);
 int anatomy_3d_selection(const Anatomy3D *a);
 void anatomy_3d_frame(App *app);
+bool anatomy_3d_pick(App *app, float mx, float my, AnatomyPick *out);
 
 #endif

@@ -132,6 +132,7 @@ static const char *card_title(const SymptomCard *c)
 {
     if (c->kind == SYMPTOM_CARD_WHOLE_BODY) return "Whole body";
     if (c->kind == SYMPTOM_CARD_NON_PHYSICAL) return "Non-physical";
+    if (c->kind == SYMPTOM_CARD_MUSCLE) return c->code[0] ? c->code : "Muscle";
     if (c->region >= 0 && c->region < REGION_COUNT) return REGIONS[c->region].label;
     return "Body region";
 }
@@ -193,6 +194,20 @@ static void add_card(App *app, SymptomCardKind kind, int region, float px, float
     }
     app->symptom_focus_card = app->symptom_card_count;
     app->symptom_card_count++;
+}
+
+void symptom_add_muscle_card(App *app, const AnatomyPick *pick)
+{
+    if (!app || !pick || app->symptom_card_count >= SYMPTOM_MAX_CARDS) return;
+    add_card(app, SYMPTOM_CARD_MUSCLE, -1, 0, 0, false);
+    SymptomCard *c = &app->symptom_cards[app->symptom_card_count - 1];
+    cs_strlcpy(c->code, pick->code, sizeof(c->code));
+    cs_strlcpy(c->region_name, pick->region, sizeof(c->region_name));
+    c->point_x = pick->x;
+    c->point_y = pick->y;
+    c->point_z = pick->z;
+    c->has_point = true;
+    app->symptom_focus_card = app->symptom_card_count - 1;
 }
 
 static void remove_card(App *app, int index)
@@ -351,7 +366,11 @@ static void draw_card_list(App *app, float x, float y, float w, float h)
         ui_text_ellipsis(ui, FONT_SEMIBOLD, r.x + 14, r.y + 10, 11.5f, UI_TEXT,
                          r.w - 100, card_title(c));
         char sub[128];
-        if (c->kind == SYMPTOM_CARD_REGION && c->region >= 0) {
+        if (c->kind == SYMPTOM_CARD_MUSCLE) {
+            snprintf(sub, sizeof(sub), "%s · 3D %.2f, %.2f, %.2f",
+                     c->region_name[0] ? c->region_name : "Muscle",
+                     c->point_x, c->point_y, c->point_z);
+        } else if (c->kind == SYMPTOM_CARD_REGION && c->region >= 0) {
             snprintf(sub, sizeof(sub), "%s view · point stored",
                      REGIONS[c->region].view == 0 ? "Front" : "Back");
         } else {
