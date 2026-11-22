@@ -147,3 +147,16 @@ The complete UI is ported to `src/gpu_renderer.c`:
 
 No SDL_Renderer calls remain in `src/`.
 
+
+## 3D anatomy viewport
+
+The symptom viewport renders the GLB through a dedicated offscreen color+depth
+pass and composites the result through the normal GPU UI pipeline.
+
+- cgltf GLB loading with node transform, normal and UV decoding.
+- One VBO/IBO for the two male/female primitives, offset side by side.
+- D32 depth target and depth-tested pipeline.
+- 4K diffuse texture with generated mipmaps.
+- Orbit drag and wheel zoom inside the body viewport.
+- Female/Male selection by clicking the left/right half; labels reflect selection.
+- Lazy retry when the B2 anatomy download completes after startup.

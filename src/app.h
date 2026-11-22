@@ -8,6 +8,7 @@
 
 #include "adb.h"
 #include "camera.h"
+#include "anatomy_3d.h"
 #include "meter.h"
 #include "quality.h"
 #include "runtime.h"
@@ -192,6 +193,8 @@ typedef struct App {
     /* runtime */
     SDL_Window *win;
     GpuRenderer *r;
+    Anatomy3D *anatomy;
+    char anatomy_model_path[CS_PATH_MAX];
     Ui ui;
     Camera cam;
     bool camera_ok;

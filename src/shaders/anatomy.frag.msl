@@ -1,0 +1,33 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct U
+{
+    float4x4 u_mvp;
+    float4 u_light;
+};
+
+struct main0_out
+{
+    float4 o_color [[color(0)]];
+};
+
+struct main0_in
+{
+    float3 v_normal [[user(locn0)]];
+    float2 v_uv [[user(locn1)]];
+};
+
+fragment main0_out main0(main0_in in [[stage_in]], constant U& u [[buffer(0)]], texture2d<float> u_tex [[texture(0)]], sampler u_texSmplr [[sampler(0)]])
+{
+    main0_out out = {};
+    float3 n = fast::normalize(in.v_normal);
+    float diff = fast::max(dot(n, fast::normalize(u.u_light.xyz)), 0.0);
+    float light = 0.37999999523162841796875 + (0.62000000476837158203125 * diff);
+    float4 base = u_tex.sample(u_texSmplr, in.v_uv);
+    out.o_color = float4(base.xyz * light, 1.0);
+    return out;
+}
+

@@ -271,6 +271,8 @@ static int anatomy_thread(void *arg)
         done += f->size;
         SDL_LockMutex(app->mu);
         app->anatomy_percent = total > 0 ? (int)((done * 100) / total) : 0;
+        if (strlen(f->name) > 4 && strcasecmp(f->name + strlen(f->name) - 4, ".glb") == 0)
+            cs_strlcpy(app->anatomy_model_path, path, sizeof(app->anatomy_model_path));
         SDL_UnlockMutex(app->mu);
     }
     char ready[256];

@@ -1660,6 +1660,7 @@ bool app_init(App *app, SDL_Window *win, GpuRenderer *r, char *err, size_t err_c
     float scale = SDL_GetWindowDisplayScale(win);
     if (scale <= 0) scale = 1.0f;
     if (!ui_init(&app->ui, r, app->asset_dir, scale, err, err_cap)) return false;
+    app->anatomy = anatomy_3d_create(app);
 
     if (!app->demo && !app->image_mode && !app->no_camera) {
         if (!app->paused) {
@@ -1841,6 +1842,8 @@ void app_shutdown(App *app)
         SDL_UnlockMutex(app->mu);
     }
     camera_close(&app->cam);
+    anatomy_3d_destroy(app->anatomy);
+    app->anatomy = NULL;
     if (app->img_tex) gpu_texture_destroy(app->r, app->img_tex);
     if (app->preview_tex) gpu_texture_destroy(app->r, app->preview_tex);
     ui_shutdown(&app->ui);
