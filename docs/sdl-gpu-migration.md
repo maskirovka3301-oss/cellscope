@@ -57,3 +57,27 @@ The shader toolchain and its CI dependencies must be decided before the UI port.
 - GPU texture memory for the 4K anatomy atlas.
 - Screenshot/UI-regression support without `SDL_RenderReadPixels`.
 - Migration size: this is a renderer rewrite, not a widget change.
+
+## Foundation status
+
+`tools/gpu_smoke.c` is the first foundation milestone. It:
+
+- creates an SDL_GPU device;
+- selects Metal on macOS, Vulkan on Linux, and Vulkan/DXIL on Windows;
+- claims the window;
+- acquires a command buffer and swapchain texture;
+- clears the swapchain and presents.
+
+On the development machine it reports:
+
+```text
+GPU driver: metal
+Shader formats: 0x30
+```
+
+The smoke target is built as `gpu_smoke` and does not replace the existing
+SDL_Renderer UI yet.
+
+SDL_shadercross discovery is wired as an optional CMake package. The next
+foundation step is to build/install SDL_shadercross and add the first real UI
+quad pipeline; until then the app continues to use its current renderer.
