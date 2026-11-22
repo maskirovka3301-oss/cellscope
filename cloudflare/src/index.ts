@@ -9,6 +9,10 @@ interface Env {
   B2_APP_KEY: string;
   B2_READ_KEY_ID: string;
   B2_READ_APP_KEY: string;
+  B2_ANATOMY_BUCKET?: string;
+  B2_ANATOMY_PREFIX?: string;
+  B2_ANATOMY_KEY_ID?: string;
+  B2_ANATOMY_APP_KEY?: string;
   BREVO_API_KEY: string;
   BREVO_SENDER_EMAIL: string;
   BREVO_SENDER_NAME: string;
@@ -143,16 +147,15 @@ function encodeRfc3986(value: string): string {
     `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
-async function presignB2(env: Env, method: string, key: string, expiresIn = 180,
-                         extraHeaders: Record<string, string> = {}): Promise<string> {
-  const keyId = method === "PUT" ? env.B2_KEY_ID : env.B2_READ_KEY_ID;
-  const appKey = method === "PUT" ? env.B2_APP_KEY : env.B2_READ_APP_KEY;
+async function presignB2Object(env: Env, method: string, bucket: string, key: string,
+                               keyId: string, appKey: string, expiresIn = 180,
+                               extraHeaders: Record<string, string> = {}): Promise<string> {
   const now = new Date();
   const amzDate = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   const dateStamp = amzDate.slice(0, 8);
   const scope = `${dateStamp}/${env.B2_REGION}/s3/aws4_request`;
   const host = env.B2_S3_HOST;
-  const uri = `/${encodeRfc3986(env.B2_BUCKET)}/${key.split("/").map(encodeRfc3986).join("/")}`;
+  const uri = `/${encodeRfc3986(bucket)}/${key.split("/").map(encodeRfc3986).join("/")}`;
   const extraNames = Object.keys(extraHeaders).map((k) => k.toLowerCase()).sort();
   const signedHeaders = ["host", ...extraNames].join(";");
   const params: Record<string, string> = {
@@ -184,6 +187,35 @@ async function presignB2(env: Env, method: string, key: string, expiresIn = 180,
   const kSigning = await hmac(kService, "aws4_request");
   const signature = toHex(await hmac(kSigning, stringToSign));
   return `https://${host}${uri}?${query}&X-Amz-Signature=${signature}`;
+}
+
+async function presignB2(env: Env, method: string, key: string, expiresIn = 180,
+                         extraHeaders: Record<string, string> = {}): Promise<string> {
+  const keyId = method === "PUT" ? env.B2_KEY_ID : env.B2_READ_KEY_ID;
+  const appKey = method === "PUT" ? env.B2_APP_KEY : env.B2_READ_APP_KEY;
+  return presignB2Object(env, method, env.B2_BUCKET, key, keyId, appKey, expiresIn,
+                         extraHeaders);
+}
+
+async function anatomyAsset(request: Request, env: Env, rawName: string): Promise<Response> {
+  if (!env.B2_ANATOMY_BUCKET || !env.B2_ANATOMY_KEY_ID || !env.B2_ANATOMY_APP_KEY)
+    return bad("anatomy asset access is not configured", 503);
+  let name: string;
+  try {
+    name = decodeURIComponent(rawName);
+  } catch {
+    return bad("invalid anatomy asset name");
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name) || name.includes(".."))
+    return bad("invalid anatomy asset name");
+  const prefix = (env.B2_ANATOMY_PREFIX ?? "").replace(/^\/+|\/+$/g, "");
+  const key = prefix ? `${prefix}/${name}` : name;
+  const signed = await presignB2Object(env, "GET", env.B2_ANATOMY_BUCKET, key,
+                                      env.B2_ANATOMY_KEY_ID, env.B2_ANATOMY_APP_KEY, 300);
+  return new Response(null, {
+    status: 302,
+    headers: { location: signed, "cache-control": "no-store" },
+  });
 }
 
 async function enroll(request: Request, env: Env): Promise<Response> {
@@ -378,6 +410,8 @@ export default {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204 });
     if (url.pathname === "/health") return json({ ok: true });
+    if (url.pathname.startsWith("/v1/anatomy/") && request.method === "GET")
+      return anatomyAsset(request, env, url.pathname.slice("/v1/anatomy/".length));
     if (url.pathname === "/verify" && request.method === "GET") return verify(request, env);
     if (url.pathname === "/v1/enroll" && request.method === "POST") return enroll(request, env);
     if (url.pathname.startsWith("/v1/device/") && request.method === "GET")

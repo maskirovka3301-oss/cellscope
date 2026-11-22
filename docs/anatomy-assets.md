@@ -45,3 +45,35 @@ in the app.
 ```
 
 The 2D body map remains available until the 3D renderer consumes this cache.
+
+
+## Private B2 delivery
+
+For a private bucket, point `CELLSCOPE_ANATOMY_URL` at the Worker route:
+
+```text
+https://<worker>/v1/anatomy
+```
+
+The Worker routes `manifest.txt` and each flat asset name to a 300-second
+presigned B2 GET. Configure the Worker:
+
+```bash
+cd cloudflare
+npx wrangler secret put B2_ANATOMY_KEY_ID
+npx wrangler secret put B2_ANATOMY_APP_KEY
+```
+
+Set the non-secret values in `wrangler.toml` or the dashboard:
+
+```toml
+[vars]
+B2_ANATOMY_BUCKET = "your-anatomy-bucket"
+B2_ANATOMY_PREFIX = ""
+B2_S3_HOST = "s3.<region>.backblazeb2.com"
+B2_REGION = "<region>"
+```
+
+The key should be read-only and scoped to the anatomy bucket. The Worker
+accepts only flat names matching `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` and returns
+302 redirects; the app's curl downloader follows them and verifies SHA-512.
