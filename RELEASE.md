@@ -76,7 +76,7 @@ The existing CellScope window remains intact inside the first tab.
 
 ### 3D rendering and assets
 
-- Renderer: SDL_GPU, using Metal on macOS, Vulkan on Linux and Vulkan/D3D12 on Windows.
+- Renderer: SDL_GPU, using Metal on macOS and Vulkan on Windows/Linux.
 - Asset source: separate B2 bucket, not Git or the application release archive.
 - Download automatically when Symptom Report opens, with a progress bar.
 - Cache at `~/.cellscope/assets/anatomy/<version>/`.
@@ -170,8 +170,8 @@ subsections with their selected definition and control values.
 
 The OpenGL hybrid is rejected. The whole rendering layer moves to SDL_GPU:
 
-1. **Foundation** — create the GPU device and swapchain; choose Metal, Vulkan or
-   D3D12; frame command buffers; shader loading; resize; screenshot readback.
+1. **Foundation** — create the GPU device and swapchain; choose Metal or Vulkan;
+   frame command buffers; shader loading; resize; screenshot readback.
 2. **UI backend** — port every UI primitive currently expressed through
    `SDL_Renderer`:
    - solid/outlined rectangles and lines
@@ -186,9 +186,8 @@ The OpenGL hybrid is rejected. The whole rendering layer moves to SDL_GPU:
 4. **Input and state** — keep the existing immediate-mode UI behavior and
    screenshot/UI regression harness.
 
-Shader formats must be delivered for all backends, preferably through
-SDL_shadercross or precompiled SPIR-V/DXIL/MSL per platform. The migration must
-not leave SDL_Renderer as a hidden second renderer.
+Shaders are compiled from GLSL to SPIR-V; SDL_shadercross generates MSL for
+Metal. The migration does not leave SDL_Renderer as a hidden second renderer.
 
 ## Acceptance criteria
 
@@ -206,7 +205,7 @@ not leave SDL_Renderer as a hidden second renderer.
 - Fuzzy symptom search loads the correct controls and supports multiple subsections.
 - One report per dataset round-trips through JSON and is included in archive/manifest.
 - A report-only dataset can be exported and uploaded.
-- The app presents through SDL_GPU on Metal/Vulkan/D3D12; no SDL_Renderer remains.
+- The app presents through SDL_GPU on Metal/Vulkan; no SDL_Renderer remains.
 - Existing UI states and interactions have visual parity after migration.
 - The 3D model loads from B2/cache with progress, checksum verification and retry.
 - Both male and female models appear frontally side by side; the user can choose one.

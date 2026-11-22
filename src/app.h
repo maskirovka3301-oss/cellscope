@@ -191,7 +191,7 @@ typedef struct App {
 
     /* runtime */
     SDL_Window *win;
-    SDL_Renderer *ren;
+    GpuRenderer *r;
     Ui ui;
     Camera cam;
     bool camera_ok;
@@ -216,8 +216,8 @@ typedef struct App {
     int ui_banner_h;
     uint8_t *img_rgb;
     int img_w, img_h;
-    SDL_Texture *img_tex;
-    SDL_Texture *preview_tex;
+    GpuTexture *img_tex;
+    GpuTexture *preview_tex;
     char preview_path[CS_PATH_MAX];
 
     SDL_Mutex *mu;
@@ -342,7 +342,7 @@ typedef enum {
 
 AppArgsResult app_parse_args(App *app, int argc, char **argv, char *err, size_t err_cap);
 void app_print_usage(void);
-bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t err_cap);
+bool app_init(App *app, SDL_Window *win, GpuRenderer *r, char *err, size_t err_cap);
 void app_shutdown(App *app);
 void app_update(App *app);
 void app_draw(App *app);

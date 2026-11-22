@@ -83,6 +83,7 @@ set(CELLSCOPE_SOURCES
   src/anatomy_assets.c
   src/train.c
   src/ui.c
+  src/gpu_renderer.c
   src/fonts.c
   src/proc.c
   src/runtime.c
@@ -134,7 +135,6 @@ target_compile_definitions(cellscope PRIVATE
   $<$<PLATFORM_ID:Windows>:_CRT_SECURE_NO_WARNINGS>
 )
 if(APPLE)
-  target_compile_definitions(cellscope PRIVATE GL_SILENCE_DEPRECATION)
   set_target_properties(cellscope PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in"
@@ -202,9 +202,6 @@ if(APPLE)
   add_executable(gpu_text_smoke tools/gpu_text_smoke.c src/fonts.c)
   target_include_directories(gpu_text_smoke PRIVATE src)
 target_link_libraries(gpu_text_smoke PRIVATE cellcore SDL3::SDL3 Freetype::Freetype)
-  add_executable(gpu_frame_smoke tools/gpu_frame_smoke.c src/gpu_ui.c)
-  target_include_directories(gpu_frame_smoke PRIVATE src)
-  target_link_libraries(gpu_frame_smoke PRIVATE SDL3::SDL3)
 endif()
 if(SDL3_shadercross_FOUND)
   target_link_libraries(gpu_smoke PRIVATE SDL3_shadercross::SDL3_shadercross)

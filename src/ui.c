@@ -50,11 +50,11 @@ static UiColor col_alpha(UiColor c, int a)
     return c;
 }
 
-bool ui_init(Ui *ui, SDL_Renderer *ren, const char *asset_dir, float scale, char *err,
+bool ui_init(Ui *ui, GpuRenderer *r, const char *asset_dir, float scale, char *err,
              size_t err_cap)
 {
     memset(ui, 0, sizeof(*ui));
-    ui->ren = ren;
+    ui->r = r;
     ui->scale = scale > 0 ? scale : 1.0f;
     cs_strlcpy(ui->asset_dir, asset_dir ? asset_dir : "", sizeof(ui->asset_dir));
     if (!fonts_init(&ui->fonts, asset_dir, ui->scale, err, err_cap)) return false;
@@ -62,8 +62,7 @@ bool ui_init(Ui *ui, SDL_Renderer *ren, const char *asset_dir, float scale, char
     ui->cursor_arrow = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     ui->cursor_hand = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
 
-    ui->bg_gradient = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC,
-                                        1, 256);
+    ui->bg_gradient = gpu_texture_create(r, 1, 256);
     if (ui->bg_gradient) {
         Uint8 pixels[256 * 4];
         for (int i = 0; i < 256; i++) {
@@ -73,8 +72,7 @@ bool ui_init(Ui *ui, SDL_Renderer *ren, const char *asset_dir, float scale, char
             pixels[i * 4 + 2] = (Uint8)(UI_BG_TOP.b + (UI_BG_BOTTOM.b - UI_BG_TOP.b) * t);
             pixels[i * 4 + 3] = 255;
         }
-        SDL_UpdateTexture(ui->bg_gradient, NULL, pixels, 4);
-        SDL_SetTextureScaleMode(ui->bg_gradient, SDL_SCALEMODE_LINEAR);
+        gpu_texture_update(ui->bg_gradient, pixels, 4);
     }
 
     return true;
@@ -83,13 +81,7 @@ bool ui_init(Ui *ui, SDL_Renderer *ren, const char *asset_dir, float scale, char
 void ui_shutdown(Ui *ui)
 {
     if (!ui) return;
-    for (int i = 0; i < UI_TEXT_CACHE; i++) {
-        if (ui->text_cache[i].tex) SDL_DestroyTexture(ui->text_cache[i].tex);
-    }
-    for (int i = 0; i < UI_SHAPE_CACHE; i++) {
-        if (ui->shape_cache[i].tex) SDL_DestroyTexture(ui->shape_cache[i].tex);
-    }
-    if (ui->bg_gradient) SDL_DestroyTexture(ui->bg_gradient);
+    if (ui->bg_gradient) gpu_texture_destroy(ui->r, ui->bg_gradient);
     if (ui->cursor_arrow) SDL_DestroyCursor(ui->cursor_arrow);
     if (ui->cursor_hand) SDL_DestroyCursor(ui->cursor_hand);
     fonts_done(&ui->fonts);
@@ -140,7 +132,7 @@ void ui_begin_frame(Ui *ui, int w, int h)
     ui->block_interactive = false;
     ui->hand_cursor = false;
     ui->clip_depth = 0;
-    SDL_SetRenderDrawBlendMode(ui->ren, SDL_BLENDMODE_BLEND);
+    gpu_renderer_begin(ui->r, w, h);
 }
 
 void ui_set_viewport(Ui *ui, float origin_y, int view_h)
@@ -156,75 +148,51 @@ void ui_end_frame(Ui *ui)
     ui->mouse_pressed = false;
     ui->mouse_released = false;
     ui->wheel = 0;
+    gpu_renderer_end(ui->r);
 }
 
 void ui_push_clip(Ui *ui, UiRect r)
 {
-    SDL_Rect rect = {(int)floorf(r.x), (int)floorf(r.y + ui->origin_y),
-                     (int)ceilf(r.w), (int)ceilf(r.h)};
-    if (ui->clip_depth > 0) {
-        SDL_Rect *prev = &ui->clip_stack[ui->clip_depth - 1];
-        SDL_Rect out;
-        if (!SDL_GetRectIntersection(prev, &rect, &out)) out = (SDL_Rect){0, 0, 0, 0};
-        rect = out;
-    }
-    if (ui->clip_depth < UI_CLIP_STACK) ui->clip_stack[ui->clip_depth++] = rect;
-    SDL_SetRenderClipRect(ui->ren, &rect);
+    gpu_renderer_push_clip(ui->r, (GpuRect){r.x, r.y + ui->origin_y, r.w, r.h});
+    if (ui->clip_depth < UI_CLIP_STACK) ui->clip_depth++;
 }
 
 void ui_pop_clip(Ui *ui)
 {
     if (ui->clip_depth <= 0) return;
     ui->clip_depth--;
-    if (ui->clip_depth == 0) SDL_SetRenderClipRect(ui->ren, NULL);
-    else SDL_SetRenderClipRect(ui->ren, &ui->clip_stack[ui->clip_depth - 1]);
+    gpu_renderer_pop_clip(ui->r);
 }
 
 void ui_background(Ui *ui)
 {
     if (ui->bg_gradient) {
-        SDL_FRect dst = {0, 0, (float)ui->win_w, (float)ui->win_h};
-        SDL_SetTextureColorMod(ui->bg_gradient, 255, 255, 255);
-        SDL_SetTextureAlphaMod(ui->bg_gradient, 255);
-        SDL_RenderTexture(ui->ren, ui->bg_gradient, NULL, &dst);
+        gpu_renderer_texture_rect(ui->r, ui->bg_gradient,
+                                  (GpuRect){0, 0, (float)ui->win_w, (float)ui->win_h},
+                                  UI_WHITE);
     } else {
-        SDL_SetRenderDrawColor(ui->ren, UI_BG_TOP.r, UI_BG_TOP.g, UI_BG_TOP.b, 255);
-        SDL_RenderClear(ui->ren);
+        gpu_renderer_fill(ui->r, (GpuRect){0, 0, (float)ui->win_w, (float)ui->win_h},
+                          UI_BG_TOP);
     }
 }
 
 void ui_rect_fill(Ui *ui, UiRect r, UiColor c)
 {
-    SDL_SetRenderDrawColor(ui->ren, c.r, c.g, c.b, c.a);
-    SDL_FRect fr = {r.x, r.y + ui->origin_y, r.w, r.h};
-    SDL_RenderFillRect(ui->ren, &fr);
+    gpu_renderer_fill(ui->r, (GpuRect){r.x, r.y + ui->origin_y, r.w, r.h}, c);
 }
 
 void ui_rect_outline(Ui *ui, UiRect r, UiColor c, float thickness)
 {
-    SDL_SetRenderDrawColor(ui->ren, c.r, c.g, c.b, c.a);
-    for (int i = 0; i < (int)thickness; i++) {
-        SDL_FRect fr = {r.x + i, r.y + ui->origin_y + i, r.w - 2 * i, r.h - 2 * i};
-        SDL_RenderRect(ui->ren, &fr);
-    }
+    float t = thickness > 1 ? thickness : 1;
+    ui_rect_fill(ui, ui_rect(r.x, r.y, r.w, t), c);
+    ui_rect_fill(ui, ui_rect(r.x, r.y + r.h - t, r.w, t), c);
+    ui_rect_fill(ui, ui_rect(r.x, r.y + t, t, r.h - 2 * t), c);
+    ui_rect_fill(ui, ui_rect(r.x + r.w - t, r.y + t, t, r.h - 2 * t), c);
 }
 
 void ui_line(Ui *ui, float x0, float y0, float x1, float y1, UiColor c, float thickness)
 {
-    SDL_SetRenderDrawColor(ui->ren, c.r, c.g, c.b, c.a);
-    SDL_SetRenderDrawBlendMode(ui->ren, SDL_BLENDMODE_BLEND);
-    float oy = ui->origin_y;
-    SDL_RenderLine(ui->ren, x0, y0 + oy, x1, y1 + oy);
-    if (thickness > 1.1f) {
-        float dx = x1 - x0, dy = y1 - y0;
-        float len = sqrtf(dx * dx + dy * dy);
-        if (len > 0.01f) {
-            float nx = -dy / len * (thickness - 1) * 0.5f;
-            float ny = dx / len * (thickness - 1) * 0.5f;
-            SDL_RenderLine(ui->ren, x0 + nx, y0 + oy + ny, x1 + nx, y1 + oy + ny);
-            SDL_RenderLine(ui->ren, x0 - nx, y0 + oy - ny, x1 - nx, y1 + oy - ny);
-        }
-    }
+    gpu_renderer_line(ui->r, x0, y0 + ui->origin_y, x1, y1 + ui->origin_y, thickness, c);
 }
 
 void ui_arc(Ui *ui, float cx, float cy, float radius, float start_deg, float end_deg,
@@ -249,22 +217,17 @@ static UiShapeEntry *shape_get(Ui *ui, int w, int h, int radius)
     UiShapeEntry *oldest = &ui->shape_cache[0];
     for (int i = 0; i < UI_SHAPE_CACHE; i++) {
         UiShapeEntry *e = &ui->shape_cache[i];
-        if (e->tex && e->w == w && e->h == h && e->radius == radius) {
+        if (e->valid && e->w == w && e->h == h && e->radius == radius) {
             e->used = now;
             return e;
         }
         if (e->used < oldest->used) oldest = e;
     }
-    UiShapeEntry *e = oldest;
-    if (e->tex) {
-        SDL_DestroyTexture(e->tex);
-        e->tex = NULL;
-    }
     if (w <= 0 || h <= 0) return NULL;
-    SDL_Surface *surf = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
-    if (!surf) return NULL;
-    Uint8 *pixels = surf->pixels;
-    int pitch = surf->pitch;
+    int ax = 0, ay = 0;
+    if (!gpu_atlas_alloc(ui->r, w, h, &ax, &ay)) return NULL;
+    int as = gpu_atlas_size(ui->r);
+    unsigned char *atlas = gpu_atlas_pixels(ui->r);
     float r = (float)radius;
     if (r > w / 2.0f) r = w / 2.0f;
     if (r > h / 2.0f) r = h / 2.0f;
@@ -280,20 +243,20 @@ static UiShapeEntry *shape_get(Ui *ui, int w, int h, int radius)
             float cov = 0.5f - d;
             if (cov < 0) cov = 0;
             if (cov > 1) cov = 1;
-            Uint8 *p = pixels + (size_t)y * pitch + (size_t)x * 4;
-            p[0] = 255;
-            p[1] = 255;
-            p[2] = 255;
-            p[3] = (Uint8)(cov * 255);
+            unsigned char *p = atlas + ((size_t)(ay + y) * as + ax + x) * 4;
+            p[0] = p[1] = p[2] = 255;
+            p[3] = (unsigned char)(cov * 255);
         }
     }
-    e->tex = SDL_CreateTextureFromSurface(ui->ren, surf);
-    SDL_DestroySurface(surf);
+    gpu_atlas_dirty(ui->r);
+    UiShapeEntry *e = oldest;
     e->w = w;
     e->h = h;
     e->radius = radius;
+    e->ax = ax;
+    e->ay = ay;
     e->used = now;
-    if (e->tex) SDL_SetTextureBlendMode(e->tex, SDL_BLENDMODE_BLEND);
+    e->valid = true;
     return e;
 }
 
@@ -303,14 +266,24 @@ void ui_round_rect(Ui *ui, UiRect r, float radius, UiColor c)
     int pw = (int)ceilf(r.w * ui->scale);
     int ph = (int)ceilf(r.h * ui->scale);
     int pr = (int)ceilf(radius * ui->scale);
+    /* Large body/panel shapes are cached as scaled tiles so the single atlas
+     * does not fill up with a handful of full-resolution masks. */
+    const int max_dim = 256;
+    if (pw > max_dim || ph > max_dim) {
+        float k = (float)max_dim / (float)(pw > ph ? pw : ph);
+        pw = (int)(pw * k);
+        ph = (int)(ph * k);
+        pr = (int)(pr * k);
+    }
+    if (pw < 1) pw = 1;
+    if (ph < 1) ph = 1;
     UiShapeEntry *e = shape_get(ui, pw, ph, pr);
-    if (!e || !e->tex) return;
-    SDL_SetTextureColorMod(e->tex, c.r, c.g, c.b);
-    SDL_SetTextureAlphaMod(e->tex, c.a);
-    SDL_FRect dst = {r.x, r.y + ui->origin_y, r.w, r.h};
-    SDL_RenderTexture(ui->ren, e->tex, NULL, &dst);
-    SDL_SetTextureColorMod(e->tex, 255, 255, 255);
-    SDL_SetTextureAlphaMod(e->tex, 255);
+    if (!e || !e->valid) return;
+    int as = gpu_atlas_size(ui->r);
+    gpu_renderer_texture(ui->r, gpu_atlas_texture(ui->r),
+                         (GpuRect){r.x, r.y + ui->origin_y, r.w, r.h},
+                         (float)e->ax / as, (float)e->ay / as,
+                         (float)(e->ax + e->w) / as, (float)(e->ay + e->h) / as, c);
 }
 
 
@@ -367,7 +340,7 @@ static UiTextEntry *text_get(Ui *ui, FontId font, float size, const char *text)
     UiTextEntry *oldest = &ui->text_cache[0];
     for (int i = 0; i < UI_TEXT_CACHE; i++) {
         UiTextEntry *e = &ui->text_cache[i];
-        if (e->tex && e->hash == h && e->font == (int)font && e->px == px) {
+        if (e->valid && e->hash == h && e->font == (int)font && e->px == px) {
             e->used = ui->frame;
             return e;
         }
@@ -420,23 +393,29 @@ static UiTextEntry *text_get(Ui *ui, FontId font, float size, const char *text)
         x += (int)(g->advance.x >> 6);
     }
 
-    UiTextEntry *e = oldest;
-    if (e->tex) SDL_DestroyTexture(e->tex);
-    e->tex = SDL_CreateTexture(ui->ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex_w,
-                               tex_h);
-    if (e->tex) {
-        SDL_UpdateTexture(e->tex, NULL, buf, tex_w * 4);
-        SDL_SetTextureBlendMode(e->tex, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureScaleMode(e->tex, SDL_SCALEMODE_LINEAR);
+    int ax = 0, ay = 0;
+    if (!gpu_atlas_alloc(ui->r, tex_w, tex_h, &ax, &ay)) {
+        free(buf);
+        return NULL;
     }
+    int as = gpu_atlas_size(ui->r);
+    unsigned char *atlas = gpu_atlas_pixels(ui->r);
+    for (int y = 0; y < tex_h; y++)
+        memcpy(atlas + ((size_t)(ay + y) * as + ax) * 4, buf + (size_t)y * tex_w * 4,
+               (size_t)tex_w * 4);
+    gpu_atlas_dirty(ui->r);
     free(buf);
+    UiTextEntry *e = oldest;
     e->hash = h;
     e->font = (int)font;
     e->px = px;
+    e->ax = ax;
+    e->ay = ay;
     e->w = tex_w;
     e->h = tex_h;
     e->used = ui->frame;
-    return e->tex ? e : NULL;
+    e->valid = true;
+    return e;
 }
 
 float ui_text_font(Ui *ui, FontId font, float x, float y, float size, UiColor c,
@@ -447,13 +426,12 @@ float ui_text_font(Ui *ui, FontId font, float x, float y, float size, UiColor c,
     if (!e) return 0;
     float w = (float)(e->w - 8) / ui->scale;
     float h = (float)e->h / ui->scale;
-    SDL_SetTextureColorMod(e->tex, c.r, c.g, c.b);
-    SDL_SetTextureAlphaMod(e->tex, c.a);
-    SDL_FRect dst = {x - 4.0f / ui->scale, y + ui->origin_y,
-                     (float)e->w / ui->scale, h};
-    SDL_RenderTexture(ui->ren, e->tex, NULL, &dst);
-    SDL_SetTextureColorMod(e->tex, 255, 255, 255);
-    SDL_SetTextureAlphaMod(e->tex, 255);
+    int as = gpu_atlas_size(ui->r);
+    gpu_renderer_texture(ui->r, gpu_atlas_texture(ui->r),
+                         (GpuRect){x - 4.0f / ui->scale, y + ui->origin_y,
+                                   (float)e->w / ui->scale, h},
+                         (float)e->ax / as, (float)e->ay / as,
+                         (float)(e->ax + e->w) / as, (float)(e->ay + e->h) / as, c);
     return w;
 }
 

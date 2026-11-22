@@ -36,11 +36,11 @@ static bool open_index(Camera *cam, int index, char *err, size_t err_cap)
     return true;
 }
 
-bool camera_init(Camera *cam, SDL_Renderer *ren, int index, char *err, size_t err_cap)
+bool camera_init(Camera *cam, GpuRenderer *r, int index, char *err, size_t err_cap)
 {
     if (cam->cam) camera_close(cam);
     memset(cam, 0, sizeof(*cam));
-    cam->ren = ren;
+    cam->r = r;
     int permission = camera_platform_prepare();
     if (permission == CAMERA_PLATFORM_DENIED) {
         cam->permission_denied = true;
@@ -89,7 +89,7 @@ void camera_close(Camera *cam)
 {
     if (!cam) return;
     if (cam->tex) {
-        SDL_DestroyTexture(cam->tex);
+        gpu_texture_destroy(cam->r, cam->tex);
         cam->tex = NULL;
     }
     if (cam->cam) {
@@ -184,14 +184,23 @@ void camera_update(Camera *cam)
     cam->last_frame_ms = cs_epoch_ms();
     cam->frames++;
 
-    if (!cam->tex && cam->ren) {
-        cam->tex = SDL_CreateTexture(cam->ren, frame->format, SDL_TEXTUREACCESS_STREAMING,
-                                     frame->w, frame->h);
-        if (cam->tex) SDL_SetTextureScaleMode(cam->tex, SDL_SCALEMODE_LINEAR);
-        cam->width = frame->w;
-        cam->height = frame->h;
+    SDL_Surface *rgba = frame;
+    bool converted = false;
+    if (frame->format != SDL_PIXELFORMAT_RGBA32) {
+        rgba = SDL_ConvertSurface(frame, SDL_PIXELFORMAT_RGBA32);
+        converted = rgba != NULL;
     }
-    if (cam->tex) SDL_UpdateTexture(cam->tex, NULL, frame->pixels, frame->pitch);
+    if (rgba) {
+        if (!cam->tex || gpu_texture_width(cam->tex) != rgba->w ||
+            gpu_texture_height(cam->tex) != rgba->h) {
+            if (cam->tex) gpu_texture_destroy(cam->r, cam->tex);
+            cam->tex = gpu_texture_create(cam->r, rgba->w, rgba->h);
+            cam->width = rgba->w;
+            cam->height = rgba->h;
+        }
+        if (cam->tex) gpu_texture_update(cam->tex, rgba->pixels, rgba->pitch);
+        if (converted) SDL_DestroySurface(rgba);
+    }
 
     int64_t now = cs_epoch_ms();
     if (now - cam->last_capture_ms >= 120) {
