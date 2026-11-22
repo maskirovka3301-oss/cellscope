@@ -14,9 +14,13 @@ The existing CellScope window remains intact inside the first tab.
 
 | Feature | Description | Completed commit |
 |---|---|---|
-| `feature/tabbed-window-shell` | Add RF Check / Symptom Report tabs and move the complete current window into RF Check; place global Export/Upload/Settings on the right of the tab bar. | |
-| `feature/dataset-lifecycle-v2` | Start a dataset at app launch, gate RF writes by capture state, stream symptom data, and rotate to a new dataset when an upload is queued. | |
-| `feature/symptom-body-map` | Add neutral front/back anatomical body maps with 55 view-specific regions, precise points, non-overlapping circles and zoom. | |
+| `feature/tabbed-window-shell` | Add RF Check / Symptom Report tabs and move the complete current window into RF Check; place global Export/Upload/Settings on the right of the tab bar. | `2cd520a` |
+| `feature/dataset-lifecycle-v2` | Start a dataset at app launch, gate RF writes by capture state, stream symptom data, and rotate to a new dataset when an upload is queued. | `db19e94` |
+| `feature/symptom-body-map` | Temporary 2D front/back fallback until 3D is ready; retire it after 3D works. | `e4ec3de` |
+| `feature/anatomy-assets` | Download versioned 3D assets from a separate B2 bucket into the local cache, with SHA-512 verification, progress UI and offline fallback. | |
+| `feature/anatomy-renderer` | OpenGL 2.1 3D viewport with orbit/zoom, textured model, male/female side-by-side frontal display, and adaptive LOD selection. | |
+| `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | |
+| `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | |
 | `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, focus-by-circle and card removal. | |
 | `feature/symptom-catalog` | Ship a provisional local symptom catalog and schema-driven controls for fuzzy symptom selection. | |
 | `feature/symptom-report-storage` | Stream one report per dataset to JSON, include it in archives/manifests, and support report-only datasets. | |
@@ -52,53 +56,33 @@ The existing CellScope window remains intact inside the first tab.
 
 ## Symptom Report tab
 
-### Body map
+### 3D anatomical model
 
-- Body fixed on the left; scrollable cards on the right.
-- Original, neutral front and back illustrations:
-  - no sexual organs
-  - not identifiable as male or female
-  - selected regions shown in red
-- Front: 27 selectable regions.
-- Back: 28 selectable regions.
-- Front and back selections are distinct: 55 view-specific selections total.
-- Shared anatomical areas use the same region name but different view entries.
-- Region list:
-  - head
-  - neck
-  - left/right shoulder
-  - left/right chest (front) / left/right upper back (back)
-  - left/right abdomen (front) / left/right lower back (back)
-  - groin (front) / left/right buttocks (back)
-  - left/right upper leg
-  - left/right lower leg
-  - left/right knee
-  - left/right ankle
-  - left/right foot
-  - left/right arm
-  - left/right elbow
-  - left/right wrist
-  - left/right hand
+- Replace the temporary 2D body map with the purchased male/female anatomical model.
+- Show both figures side by side, frontal, for the user to choose.
+- Fully rotate, zoom and pan the selected model in 3D.
+- Click a muscle region to add a symptom card; store the precise surface point.
+- Use the model's painted muscle codes as the primary mapping.
+- Build a code ID atlas in the model UV layout; click sampling returns the code.
+- Derive a code-to-body-region table and present it for user review; manually
+  correct any uncertain mappings.
+- No front/back selection model: the 3D surface point and rotation replace it.
+- Selected regions highlight on the model.
+- Male/female selection is recorded with the cards.
+- The 2D map remains only as a temporary fallback and is removed once 3D works.
 
-### Interaction
+### 3D rendering and assets
 
-- Single click a region adds a new card for that region/view.
-- Double click zooms into the region.
-- In zoom, click to set an optional precise point; clicking again moves it.
-- Small close button at the upper-right of the body view exits zoom.
-- Each region card gets a small circle at its point.
-- If a circle would overlap, use the nearest free position and draw a leader line
-  to the precise point.
-- Store the precise point and displayed marker separately.
-- Clicking a circle focuses and scrolls to its card.
-- Removing a card removes its circle.
-- Multiple cards may target the same region/view.
-- Circles never overlap.
-- Top-left body controls:
-  - `add whole body symptom` creates one card covering all 55 selections.
-  - `add non-physical symptom` creates a card with no body region.
-- Whole-body, non-physical and region cards may coexist.
-- All cards are preserved unless explicitly removed.
+- Renderer: OpenGL 2.1 compatibility, proven through the SDL_Renderer/OpenGL spike.
+- Asset source: separate B2 bucket, not Git or the application release archive.
+- Download automatically when Symptom Report opens, with a progress bar.
+- Cache at `~/.cellscope/assets/anatomy/<version>/`.
+- Verify SHA-512 before use; show an error/retry state if unavailable.
+- Male/female variants, 4K diffuse texture, and a muscle-code ID atlas.
+- Generate low/medium/high LODs while preserving UVs and code mapping.
+- Select LOD adaptively from measured frame time and available hardware.
+- Keep lighting simple: diffuse texture, ambient and directional light, mipmaps,
+  sRGB and anisotropic filtering.
 
 ### Cards and symptom subsections
 
@@ -195,7 +179,14 @@ subsections with their selected definition and control values.
 - Fuzzy symptom search loads the correct controls and supports multiple subsections.
 - One report per dataset round-trips through JSON and is included in archive/manifest.
 - A report-only dataset can be exported and uploaded.
-- UI regression covers both tabs, body views, zoom, circles and a populated report.
+- The 3D model loads from B2/cache with progress, checksum verification and retry.
+- Both male and female models appear frontally side by side; the user can choose one.
+- The chosen model rotates and zooms in 3D.
+- Clicking a muscle returns its painted code and creates a symptom card with a 3D point.
+- The derived code-to-region table is reviewed and corrected before release.
+- Adaptive LOD keeps interaction responsive on modest hardware.
+- The 2D fallback is removed after 3D parity is verified.
+- UI regression covers both tabs, 3D model states and a populated report.
 
 ## Out of scope
 
@@ -203,6 +194,8 @@ subsections with their selected definition and control values.
 - RF data capture from the symptom tab.
 - Remote report editing or separate report upload.
 - Changes to the RF measurement pipeline.
+- Shipping the purchased model files in Git or release archives.
+- Vulkan/Metal/D3D12 rendering or an SDL_GPU UI migration in this release.
 
 ## Release checklist
 
