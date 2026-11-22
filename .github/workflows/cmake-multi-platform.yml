@@ -149,6 +149,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    outputs:
+      signed: ${{ steps.signing_outcome.outputs.signed }}
     steps:
       - name: Check out sources
         uses: actions/checkout@v4
@@ -166,6 +168,8 @@ jobs:
           Get-ChildItem signed -Recurse -File | Select-Object FullName
 
       - name: Validate signing configuration
+        id: validate_config
+        continue-on-error: true
         shell: pwsh
         env:
           ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
@@ -187,6 +191,9 @@ jobs:
           }
 
       - name: Azure login
+        id: azure_login
+        if: steps.validate_config.outcome == 'success'
+        continue-on-error: true
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -194,6 +201,9 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Artifact Signing
+        id: artifact_signing
+        if: steps.validate_config.outcome == 'success' && steps.azure_login.outcome == 'success'
+        continue-on-error: true
         uses: Azure/artifact-signing-action@v2.0.0
         with:
           endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
@@ -217,6 +227,9 @@ jobs:
           exclude-interactive-browser-credential: true
 
       - name: Verify Windows signatures
+        id: verify_signatures
+        if: steps.artifact_signing.outcome == 'success'
+        continue-on-error: true
         shell: pwsh
         run: |
           $files = Get-ChildItem signed -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' }
@@ -230,18 +243,38 @@ jobs:
           $files | ForEach-Object { Get-AuthenticodeSignature $_.FullName | Select-Object Path, Status, SignerCertificate }
 
       - name: Repackage signed Windows build
+        id: repackage
+        if: steps.verify_signatures.outcome == 'success'
+        continue-on-error: true
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Compress-Archive -Path "signed\*" -DestinationPath "dist\CellScope-windows-x64.zip" -Force
 
       - name: Replace Windows artifact
+        id: replace_artifact
+        if: steps.repackage.outcome == 'success'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: cellscope-Windows
           path: dist/*
           overwrite: true
           if-no-files-found: error
+
+      - name: Record signing outcome
+        id: signing_outcome
+        if: always()
+        shell: pwsh
+        run: |
+          $signed = '${{ steps.replace_artifact.outcome }}' -eq 'success'
+          "signed=$($signed.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          if (-not $signed) {
+            Write-Output "::warning::warning: these binaries have not been code signed"
+            "warning: these binaries have not been code signed" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "Windows binaries are code signed." >> $env:GITHUB_STEP_SUMMARY
+          }
 
   release:
     name: Publish release
@@ -288,8 +321,13 @@ jobs:
 
       - name: Compose release notes
         if: steps.release_tag.outputs.tag != ''
+        env:
+          WINDOWS_SIGNED: ${{ needs.sign-windows.outputs.signed }}
         run: |
           {
+            if [ "$WINDOWS_SIGNED" != "true" ]; then
+              printf '> **warning: these binaries have not been code signed**\n\n'
+            fi
             printf '**Production ready.**\n\n'
             printf 'Automated multi-platform production build of CellScope.\n\n'
             printf 'Built at %s from %s for:\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_SHA}"
