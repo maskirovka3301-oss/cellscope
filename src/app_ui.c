@@ -1303,11 +1303,19 @@ static void draw_upload_modal(App *app, UiState *s)
     ui_text_font(ui, FONT_SEMIBOLD, card.x + 26, card.y + 22, 19.0f, UI_TEXT,
                  "Upload dataset");
     char api[512], email[256], status[512];
+    int queued = 0;
     SDL_LockMutex(app->mu);
     cs_strlcpy(api, app->settings.upload_api_url, sizeof(api));
     cs_strlcpy(email, app->settings.upload_email, sizeof(email));
     cs_strlcpy(status, app->upload_status, sizeof(status));
+    queued = app->upload_job_count;
     SDL_UnlockMutex(app->mu);
+    if (queued > 0) {
+        char q[64];
+        snprintf(q, sizeof(q), "%d queued", queued);
+        ui_text_right(ui, FONT_MONO, card.x + card.w - 26, card.y + 90, 8.0f,
+                      UI_AMBER, q);
+    }
 
     char line[1024];
     snprintf(line, sizeof(line), "API · %s", api[0] ? api : "not configured");

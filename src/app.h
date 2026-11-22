@@ -121,6 +121,11 @@ typedef struct {
     char message[512];
 } UploadHistoryEntry;
 
+typedef struct {
+    char archive[CS_PATH_MAX];
+    char sig[CS_PATH_MAX];
+} UploadJob;
+
 typedef struct App {
     /* options */
     bool train_mode;
@@ -252,6 +257,9 @@ typedef struct App {
     char upload_status[512];
     UploadHistoryEntry upload_history[20];
     int upload_history_count;
+    UploadJob upload_jobs[16];
+    int upload_job_count;
+    SDL_Thread *upload_thread;
     int64_t session_started_ms;
     uint64_t session_cell_start;
     uint64_t session_meter_start;
