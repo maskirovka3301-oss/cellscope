@@ -467,9 +467,22 @@ void app_upload_dataset(App *app)
     char api[512];
     SDL_LockMutex(app->mu);
     cs_strlcpy(api, app->settings.upload_api_url, sizeof(api));
+    int sample_count = app->cell_count;
+    int reading_count = app->meter_count;
     app->upload_status[0] = '\0';
     app->silent_export = true;
     SDL_UnlockMutex(app->mu);
+
+    if (sample_count == 0 && reading_count == 0) {
+        SDL_LockMutex(app->mu);
+        app->silent_export = false;
+        cs_strlcpy(app->upload_status,
+                   "Dataset is empty: no cell samples or readings. Nothing was uploaded.",
+                   sizeof(app->upload_status));
+        SDL_UnlockMutex(app->mu);
+        app_notify(app, true, "Dataset is empty; nothing was compressed or uploaded.");
+        return;
+    }
 
     app_export_dataset(app);
 
@@ -3109,6 +3122,16 @@ void app_export_dataset(App *app)
     SDL_UnlockMutex(app->mu);
     if (!dir[0] || !cs_is_dir(dir)) {
         app_notify(app, true, "No current dataset to export. Start a capture first.");
+        return;
+    }
+    SDL_LockMutex(app->mu);
+    int sample_count = app->cell_count;
+    int reading_count = app->meter_count;
+    SDL_UnlockMutex(app->mu);
+    if (sample_count == 0 && reading_count == 0) {
+        app_notify(app, true,
+                   "Dataset is empty: no cell samples or readings were captured. "
+                   "Nothing was compressed or exported.");
         return;
     }
     if (write_failed) {
