@@ -1357,11 +1357,14 @@ static void draw_upload_modal(App *app, UiState *s)
     UiRect close = ui_rect(card.x + card.w - 118, by, 92, 34);
     UiRect enroll = ui_rect(card.x + card.w - 342, by, 132, 34);
     UiRect upload = ui_rect(card.x + card.w - 200, by, 72, 34);
+    UiRect reset = ui_rect(card.x + 26, by, 126, 34);
     if (ui_button(ui, close, "Close", BUTTON_SECONDARY, true)) app_close_upload_modal(app);
     if (ui_button(ui, enroll, "Enroll email", BUTTON_SECONDARY, api[0] && email[0]))
         app_enroll_device(app);
     if (ui_button(ui, upload, "Upload", BUTTON_PRIMARY, api[0] && email[0]))
         app_upload_dataset(app);
+    if (ui_button(ui, reset, "Reset identity", BUTTON_QUIET, true))
+        app_reset_identity(app);
 }
 
 void app_draw(App *app)
