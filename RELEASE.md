@@ -15,7 +15,8 @@ Planning
 - [ ] Feature scope agreed
 - [ ] Feature branches merged into `develop`
 - [ ] `release/x.y.z` pushed and all platform builds green
-- [ ] Release commit tagged `vX.Y.Z`
-- [ ] Tagged commit merged to `main`
-- [ ] `main` pushed and GitHub release verified
+- [ ] GitHub release `vX.Y.Z` generated from the release branch
+- [ ] Release branch fast-forwarded into `main`
+- [ ] `main` pushed and release assets refreshed
+- [ ] `main` merged back into `develop`
 - [ ] `main` merged back into `develop`

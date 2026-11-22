@@ -66,28 +66,29 @@ git checkout -b release/1.0.0
 git push origin release/1.0.0
 ```
 
-A push to `release/**` runs the multi-platform workflow but **does not create a
-GitHub release**. Fix build errors on the release branch, commit, and push until
-macOS, Linux and Windows are green.
+A push to `release/**` runs the multi-platform workflow. If the macOS, Linux
+and Windows builds pass, the workflow creates the `vX.Y.Z` tag and a GitHub
+release with the packaged binaries. Fix build errors on the release branch,
+commit, and push until all platforms are green and the release appears.
 
-## Final tag, main, and release
+## Merge the successful release into main
 
-After the release branch is green:
+Once the release workflow is green and the tagged GitHub release exists, merge
+the release branch into `main` and push it:
 
 ```bash
-git tag -a v1.0.0 -m "CellScope v1.0.0" release/1.0.0
 git checkout main
+git pull --ff-only
 git merge --ff-only release/1.0.0
-git push origin v1.0.0 main
+git push origin main
 ```
 
-- `release/1.0.0` must be a descendant of `main` so the merge is a
+- `release/1.0.0` must be a descendant of `main`, so the merge is a
   fast-forward and the tag remains on the `main` tip.
-- If a fast-forward is impossible, merge with `--no-ff` and move the tag to the
-  resulting merge commit before pushing main.
-- Pushing `main` with the exact semantic tag on `HEAD` is the only event that
-  publishes binaries to GitHub Releases.
-- A main push without a tag is build-only and does not publish.
+- The `main` push rebuilds all platforms and refreshes the same `v1.0.0`
+  release with binaries built from the final main commit.
+- If a fast-forward is impossible, merge with `--no-ff`, move the tag to the
+  merge commit, and push both; do not create a second release tag.
 
 Then merge `main` back into `develop` and delete the release branch:
 
@@ -101,10 +102,10 @@ git push origin --delete release/1.0.0
 
 ## CI behavior
 
-- `release/**` push: build and test all platforms, upload workflow artifacts,
-  no GitHub release.
-- `main` push with a semantic tag exactly on `HEAD`: build, test, package and
-  publish a GitHub release whose title is `CellScope vX.Y.Z`.
+- `release/**` push: build and test all platforms. If all pass, create the
+  `vX.Y.Z` tag and publish the GitHub release with packaged artifacts.
+- `main` push with a semantic tag exactly on `HEAD`: rebuild and refresh the
+  release assets from the merged main commit.
 - `main` push without a tag: build and test only.
 - Pull requests to `main` or `develop`: build and test only.
 - Manual `workflow_dispatch`: build and test only.
@@ -113,7 +114,9 @@ git push origin --delete release/1.0.0
 
 - Never commit a version bump.
 - Never tag or publish before the release branch is green.
-- Never publish from `feature/**` or `develop`.
+- Never publish from `feature/**` or `develop`; the workflow does it for
+  `release/**` and refreshes it from tagged `main`.
+- Only use `release/x.y.z`; the workflow rejects other release branch names.
 - Do not use `--force` on shared branches.
 - Keep `RELEASE.md` current with feature descriptions and completed commit
   hashes.
