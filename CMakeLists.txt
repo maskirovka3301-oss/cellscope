@@ -79,6 +79,7 @@ set(CELLSCOPE_SOURCES
   src/main.c
   src/app.c
   src/app_ui.c
+  src/symptom_ui.c
   src/train.c
   src/ui.c
   src/fonts.c
