@@ -2,17 +2,17 @@
 
 ## Status
 
-Planning complete — implementation in progress.
+Implementation complete — ready for `release/0.1.0`.
 
 ## Planned features
 
 | Feature | Description | Completed commit |
 |---|---|---|
-| `feature/empty-dataset-guard` | Refuse to archive or upload datasets with no cell samples and no readings. | |
-| `feature/dataset-manifest` | Add a self-describing `manifest.json` (dataset metadata, platform, capture counts, file hashes) to every archive. | |
-| `feature/upload-history` | Persist and display upload results, errors, timestamps and B2 object keys. | |
-| `feature/async-upload-queue` | Move uploads to a background queue with retries and restart-safe pending jobs. | |
-| `feature/device-key-keychain` | Store the Ed25519 identity in the OS credential store where available, with device-key reset/revocation. | |
+| `feature/empty-dataset-guard` | Refuse to archive or upload datasets with no cell samples and no readings. | `7b62212` |
+| `feature/dataset-manifest` | Add a self-describing `manifest.json` (dataset metadata, platform, capture counts, git commit) to every archive. | `3f08f5c` |
+| `feature/upload-history` | Persist and display upload results, errors, timestamps and B2 object keys. | `5e248e3` |
+| `feature/async-upload-queue` | Move uploads to a background queue with retries and restart-safe pending jobs. | `f3b4626` |
+| `feature/device-key-keychain` | Store the Ed25519 identity in the OS credential store where available, with device-key reset/revocation. | `7f66d0a` |
 
 ## Acceptance criteria
 
@@ -26,7 +26,7 @@ Planning complete — implementation in progress.
 ## Release checklist
 
 - [x] Feature scope agreed
-- [ ] Feature branches merged into `develop`
+- [x] Feature branches merged into `develop`
 - [ ] `release/0.1.0` pushed and all platform builds green
 - [ ] GitHub release `v0.1.0` generated from the release branch
 - [ ] Release branch fast-forwarded into `main`
