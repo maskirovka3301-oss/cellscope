@@ -134,11 +134,19 @@ void ui_begin_frame(Ui *ui, int w, int h)
 {
     ui->win_w = w;
     ui->win_h = h;
+    ui->origin_y = 0;
+    ui->view_h = h;
     ui->frame++;
     ui->block_interactive = false;
     ui->hand_cursor = false;
     ui->clip_depth = 0;
     SDL_SetRenderDrawBlendMode(ui->ren, SDL_BLENDMODE_BLEND);
+}
+
+void ui_set_viewport(Ui *ui, float origin_y, int view_h)
+{
+    ui->origin_y = origin_y;
+    ui->view_h = view_h > 0 ? view_h : ui->win_h;
 }
 
 void ui_end_frame(Ui *ui)
@@ -152,7 +160,8 @@ void ui_end_frame(Ui *ui)
 
 void ui_push_clip(Ui *ui, UiRect r)
 {
-    SDL_Rect rect = {(int)floorf(r.x), (int)floorf(r.y), (int)ceilf(r.w), (int)ceilf(r.h)};
+    SDL_Rect rect = {(int)floorf(r.x), (int)floorf(r.y + ui->origin_y),
+                     (int)ceilf(r.w), (int)ceilf(r.h)};
     if (ui->clip_depth > 0) {
         SDL_Rect *prev = &ui->clip_stack[ui->clip_depth - 1];
         SDL_Rect out;
@@ -187,7 +196,7 @@ void ui_background(Ui *ui)
 void ui_rect_fill(Ui *ui, UiRect r, UiColor c)
 {
     SDL_SetRenderDrawColor(ui->ren, c.r, c.g, c.b, c.a);
-    SDL_FRect fr = {r.x, r.y, r.w, r.h};
+    SDL_FRect fr = {r.x, r.y + ui->origin_y, r.w, r.h};
     SDL_RenderFillRect(ui->ren, &fr);
 }
 
@@ -195,7 +204,7 @@ void ui_rect_outline(Ui *ui, UiRect r, UiColor c, float thickness)
 {
     SDL_SetRenderDrawColor(ui->ren, c.r, c.g, c.b, c.a);
     for (int i = 0; i < (int)thickness; i++) {
-        SDL_FRect fr = {r.x + i, r.y + i, r.w - 2 * i, r.h - 2 * i};
+        SDL_FRect fr = {r.x + i, r.y + ui->origin_y + i, r.w - 2 * i, r.h - 2 * i};
         SDL_RenderRect(ui->ren, &fr);
     }
 }
@@ -204,15 +213,16 @@ void ui_line(Ui *ui, float x0, float y0, float x1, float y1, UiColor c, float th
 {
     SDL_SetRenderDrawColor(ui->ren, c.r, c.g, c.b, c.a);
     SDL_SetRenderDrawBlendMode(ui->ren, SDL_BLENDMODE_BLEND);
-    SDL_RenderLine(ui->ren, x0, y0, x1, y1);
+    float oy = ui->origin_y;
+    SDL_RenderLine(ui->ren, x0, y0 + oy, x1, y1 + oy);
     if (thickness > 1.1f) {
         float dx = x1 - x0, dy = y1 - y0;
         float len = sqrtf(dx * dx + dy * dy);
         if (len > 0.01f) {
             float nx = -dy / len * (thickness - 1) * 0.5f;
             float ny = dx / len * (thickness - 1) * 0.5f;
-            SDL_RenderLine(ui->ren, x0 + nx, y0 + ny, x1 + nx, y1 + ny);
-            SDL_RenderLine(ui->ren, x0 - nx, y0 - ny, x1 - nx, y1 - ny);
+            SDL_RenderLine(ui->ren, x0 + nx, y0 + oy + ny, x1 + nx, y1 + oy + ny);
+            SDL_RenderLine(ui->ren, x0 - nx, y0 + oy - ny, x1 - nx, y1 + oy - ny);
         }
     }
 }
@@ -297,7 +307,7 @@ void ui_round_rect(Ui *ui, UiRect r, float radius, UiColor c)
     if (!e || !e->tex) return;
     SDL_SetTextureColorMod(e->tex, c.r, c.g, c.b);
     SDL_SetTextureAlphaMod(e->tex, c.a);
-    SDL_FRect dst = {r.x, r.y, r.w, r.h};
+    SDL_FRect dst = {r.x, r.y + ui->origin_y, r.w, r.h};
     SDL_RenderTexture(ui->ren, e->tex, NULL, &dst);
     SDL_SetTextureColorMod(e->tex, 255, 255, 255);
     SDL_SetTextureAlphaMod(e->tex, 255);
@@ -439,7 +449,8 @@ float ui_text_font(Ui *ui, FontId font, float x, float y, float size, UiColor c,
     float h = (float)e->h / ui->scale;
     SDL_SetTextureColorMod(e->tex, c.r, c.g, c.b);
     SDL_SetTextureAlphaMod(e->tex, c.a);
-    SDL_FRect dst = {x - 4.0f / ui->scale, y, (float)e->w / ui->scale, h};
+    SDL_FRect dst = {x - 4.0f / ui->scale, y + ui->origin_y,
+                     (float)e->w / ui->scale, h};
     SDL_RenderTexture(ui->ren, e->tex, NULL, &dst);
     SDL_SetTextureColorMod(e->tex, 255, 255, 255);
     SDL_SetTextureAlphaMod(e->tex, 255);
@@ -565,7 +576,7 @@ float ui_text_wrapped(Ui *ui, float x, float y, float w, float size, UiColor c,
 bool ui_hover(Ui *ui, UiRect r)
 {
     if (ui->block_interactive) return false;
-    bool hit = ui_rect_contains(r, ui->mx, ui->my);
+    bool hit = ui_rect_contains(r, ui->mx, ui->my - ui->origin_y);
     if (hit) ui->hand_cursor = true;
     return hit;
 }
@@ -616,7 +627,7 @@ bool ui_button(Ui *ui, UiRect r, const char *label, UiButtonKind kind, bool enab
     ui_text_center(ui, FONT_SEMIBOLD, rr.x + rr.w / 2, rr.y + (rr.h - th) / 2 + 1, 12.5f, fg,
                    label);
     if (hover && enabled && ui->mouse_released &&
-        ui_rect_contains(r, ui->press_x, ui->press_y)) {
+        ui_rect_contains(r, ui->press_x, ui->press_y - ui->origin_y)) {
         ui->mouse_released = false;
         ui->mouse_pressed = false;
         return true;

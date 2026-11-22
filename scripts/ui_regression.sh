@@ -25,7 +25,7 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-for mode in main live best settings upload model remove; do
+for mode in main live best settings upload model remove symptom; do
     CELLSCOPE_DISABLE_KEYCHAIN=1 "$APP" --autoplay --image "$IMAGE" --readme-fixture "$mode" \
         --screenshot "$OUT/$mode.png" --screenshot-delay 1200 --run-ms 3000 \
         --no-modal --no-runtime --capture-dir "$OUT/capture-$mode" >/dev/null 2>&1 || {

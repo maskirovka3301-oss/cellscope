@@ -85,6 +85,8 @@ typedef struct {
     Fonts fonts;
     float scale;
     int win_w, win_h;
+    float origin_y;
+    int view_h;
     uint64_t frame;
 
     float mx, my;
@@ -111,6 +113,7 @@ void ui_shutdown(Ui *ui);
 void ui_handle_event(Ui *ui, const SDL_Event *e);
 void ui_begin_frame(Ui *ui, int w, int h);
 void ui_end_frame(Ui *ui);
+void ui_set_viewport(Ui *ui, float origin_y, int view_h);
 
 void ui_background(Ui *ui);
 void ui_push_clip(Ui *ui, UiRect r);
