@@ -55,6 +55,32 @@ git push origin develop
 Update `RELEASE.md` with the feature branch's final commit hash. Do not tag or
 publish from a feature branch.
 
+## Local verification
+
+Feature and `develop` work is verified locally rather than on every CI push:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Run `scripts/ui_regression.sh` for any UI change. Do not rely on a push to
+`develop` to catch build failures.
+
+When all planned features are merged into `develop`, run the full multi-platform
+build manually before starting the release branch:
+
+```bash
+gh workflow run cmake-multi-platform.yml --ref develop
+gh run watch --repo maskirovka3301-oss/cellscope
+```
+
+`develop` pushes and pull requests into `develop` do not run CI. Only this final
+manual CI run on `develop`, the release branch build, and the tagged main build
+run in CI. Do not create the release branch, tag, or merge to `main` until the
+final `develop` build is green.
+
 ## Pre-release review gate
 
 Before creating a release branch, the integrated `develop` build must be reviewed
@@ -122,7 +148,8 @@ git push origin --delete release/1.0.0
 
 ## CI behavior
 
-- `develop` push: no build. Use a pull request to `develop` for CI checks.
+- `develop` push or pull request: no CI. Build and test locally.
+- Manual `workflow_dispatch` on `develop`: final pre-release CI build and tests.
 - `release/**` push: build and test all platforms. If all pass, create the
   `vX.Y.Z` tag and publish the GitHub release with packaged artifacts.
 - `main` push with a semantic tag exactly on `HEAD`: rebuild and refresh the
