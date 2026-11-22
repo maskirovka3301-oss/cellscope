@@ -14,3 +14,6 @@ __pycache__/
 docs/example.png
 settings.json
 exports/
+
+# Purchased 3D anatomy sources (delivered from B2 at runtime)
+assets/3d/
