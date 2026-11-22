@@ -9,6 +9,8 @@
 #define strtok_r strtok_s
 #endif
 
+#define TABBAR_H 48.0f
+
 typedef struct {
     AdbStatus adb;
     ReaderView reader;
@@ -22,6 +24,7 @@ typedef struct {
     bool upload_modal_open;
     bool model_modal_open;
     bool paused;
+    int active_tab;
     bool ever_connected;
     char device_label[128];
     int64_t last_poll_ok_ms;
@@ -64,6 +67,7 @@ static void snapshot(App *app, UiState *s)
     s->upload_modal_open = app->upload_modal_open;
     s->model_modal_open = app->model_modal_open;
     s->paused = app->paused;
+    s->active_tab = app->active_tab;
     s->ever_connected = app->ever_connected;
     cs_strlcpy(s->device_label, app->device_label, sizeof(s->device_label));
     s->last_poll_ok_ms = app->last_poll_ok_ms;
@@ -73,7 +77,7 @@ static void snapshot(App *app, UiState *s)
 
 static void layout(App *app, Layout *l)
 {
-    int w = app->ui.win_w, h = app->ui.win_h;
+    int w = app->ui.win_w, h = app->ui.view_h;
     float pad = 18, gap = 14;
     l->header = ui_rect(0, 0, (float)w, 64);
     l->footer = ui_rect(0, (float)h - 28, (float)w, 28);
@@ -213,18 +217,6 @@ static void draw_header(App *app, UiState *s)
 
     float pill_h = 26, gap = 8;
     float x = w - 18;
-    /* Export / Upload / Settings */
-    UiRect export_r = ui_rect(x - 78, 18, 78, pill_h);
-    if (ui_button(ui, export_r, "Export", BUTTON_SECONDARY, true)) app_export_dataset(app);
-    x -= 78 + gap;
-    UiRect upload_r = ui_rect(x - 70, 18, 70, pill_h);
-    if (ui_button(ui, upload_r, "Upload", BUTTON_SECONDARY, true))
-        app_open_upload_modal(app);
-    x -= 70 + gap;
-    UiRect settings_r = ui_rect(x - 78, 18, 78, pill_h);
-    if (ui_button(ui, settings_r, "Settings", BUTTON_SECONDARY, true))
-        app_open_settings_modal(app);
-    x -= 78 + gap;
 
     /* Reader pill */
     char reader_text[128];
@@ -976,7 +968,7 @@ static void draw_meter_panel(App *app, UiState *s, UiRect r)
 static void draw_footer(App *app, UiState *s)
 {
     Ui *ui = &app->ui;
-    float h = (float)ui->win_h;
+    float h = (float)ui->view_h;
     ui_line(ui, 0, h - 28.5f, (float)ui->win_w, h - 28.5f, UI_BORDER_SOFT, 1);
     char left[256];
     const char *con = s->adb.state == ADB_STATE_CONNECTED
@@ -1009,7 +1001,7 @@ static void draw_toast(App *app)
     Ui *ui = &app->ui;
     float tw = ui_text_width(ui, FONT_MEDIUM, 10.8f, app->toast);
     float w = CS_MIN((float)ui->win_w - 80, tw + 46);
-    UiRect r = ui_rect(((float)ui->win_w - w) / 2, (float)ui->win_h - 74, w, 34);
+    UiRect r = ui_rect(((float)ui->win_w - w) / 2, (float)ui->view_h - 74, w, 34);
     ui_round_rect(ui, r, 10, UI_COLOR(12, 18, 25, 242));
     ui_round_rect(ui, ui_inset(r, 1), 9, UI_COLOR(17, 25, 34, 242));
     draw_dot(ui, r.x + 16, r.y + 17, app->toast_error ? UI_RED : UI_ACCENT);
@@ -1031,7 +1023,7 @@ static void draw_step(Ui *ui, float x, float y, int number, const char *title, c
 static void draw_modal(App *app, UiState *s)
 {
     Ui *ui = &app->ui;
-    float W = (float)ui->win_w, H = (float)ui->win_h;
+    float W = (float)ui->win_w, H = (float)ui->view_h;
     ui_rect_fill(ui, ui_rect(0, 0, W, H), UI_COLOR(3, 5, 8, 196));
 
     float cw = CS_MIN(790.0f, W - 70);
@@ -1135,7 +1127,7 @@ static void draw_modal(App *app, UiState *s)
 static void draw_remove_modal(App *app, UiState *s)
 {
     Ui *ui = &app->ui;
-    float W = (float)ui->win_w, H = (float)ui->win_h;
+    float W = (float)ui->win_w, H = (float)ui->view_h;
     ui_rect_fill(ui, ui_rect(0, 0, W, H), UI_COLOR(3, 5, 8, 200));
     float cw = CS_MIN(460.0f, W - 60);
     float ch = 214;
@@ -1180,7 +1172,7 @@ static void draw_settings_modal(App *app, UiState *s)
 {
     (void)s;
     Ui *ui = &app->ui;
-    float W = (float)ui->win_w, H = (float)ui->win_h;
+    float W = (float)ui->win_w, H = (float)ui->view_h;
     ui_rect_fill(ui, ui_rect(0, 0, W, H), UI_COLOR(3, 5, 8, 205));
     float cw = CS_MIN(740.0f, W - 50), ch = CS_MIN(620.0f, H - 50);
     UiRect card = ui_rect((W - cw) / 2, (H - ch) / 2, cw, ch);
@@ -1233,7 +1225,7 @@ static void draw_model_modal(App *app, UiState *s)
 {
     (void)s;
     Ui *ui = &app->ui;
-    float W = (float)ui->win_w, H = (float)ui->win_h;
+    float W = (float)ui->win_w, H = (float)ui->view_h;
     ui_rect_fill(ui, ui_rect(0, 0, W, H), UI_COLOR(3, 5, 8, 200));
     float cw = CS_MIN(680.0f, W - 60);
     float ch = CS_MIN(620.0f, H - 60);
@@ -1292,7 +1284,7 @@ static void draw_upload_modal(App *app, UiState *s)
 {
     (void)s;
     Ui *ui = &app->ui;
-    float W = (float)ui->win_w, H = (float)ui->win_h;
+    float W = (float)ui->win_w, H = (float)ui->view_h;
     ui_rect_fill(ui, ui_rect(0, 0, W, H), UI_COLOR(3, 5, 8, 200));
     float cw = CS_MIN(660.0f, W - 60), ch = 320;
     UiRect card = ui_rect((W - cw) / 2, (H - ch) / 2, cw, ch);
@@ -1367,30 +1359,103 @@ static void draw_upload_modal(App *app, UiState *s)
         app_reset_identity(app);
 }
 
+static void draw_tab_button(App *app, float x, float y, float w, const char *label,
+                            int tab)
+{
+    Ui *ui = &app->ui;
+    UiRect r = ui_rect(x, y, w, 32);
+    bool active = app->active_tab == tab;
+    bool hover = ui_hover(ui, r);
+    UiColor bg = active ? UI_COLOR(24, 35, 45, 255)
+                        : (hover ? UI_COLOR(18, 27, 35, 255) : UI_COLOR(12, 18, 24, 255));
+    ui_round_rect(ui, r, 8, bg);
+    if (active) ui_round_rect(ui, ui_rect(x + 8, y + 30, w - 16, 2), 1, UI_ACCENT);
+    ui_text_center(ui, FONT_SEMIBOLD, x + w / 2, y + 9, 11.5f,
+                   active ? UI_TEXT : UI_MUTED, label);
+    if (hover && ui->mouse_pressed) {
+        app_set_tab(app, tab);
+        ui_consume_click(ui);
+    }
+}
+
+static void draw_tab_bar(App *app)
+{
+    Ui *ui = &app->ui;
+    float w = (float)ui->win_w;
+    ui_rect_fill(ui, ui_rect(0, 0, w, TABBAR_H), UI_COLOR(8, 12, 17, 255));
+    ui_line(ui, 0, TABBAR_H - 0.5f, w, TABBAR_H - 0.5f, UI_BORDER_SOFT, 1);
+
+    float x = 18;
+    draw_tab_button(app, x, 8, 94, "RF Check", APP_TAB_RF);
+    x += 100;
+    draw_tab_button(app, x, 8, 146, "Symptom Report", APP_TAB_SYMPTOM);
+
+    float by = 9, bh = 30, gap = 8;
+    float bx = w - 18;
+    UiRect export_r = ui_rect(bx - 78, by, 78, bh);
+    if (ui_button(ui, export_r, "Export", BUTTON_SECONDARY, true)) app_export_dataset(app);
+    bx -= 78 + gap;
+    UiRect upload_r = ui_rect(bx - 70, by, 70, bh);
+    if (ui_button(ui, upload_r, "Upload", BUTTON_SECONDARY, true))
+        app_open_upload_modal(app);
+    bx -= 70 + gap;
+    UiRect settings_r = ui_rect(bx - 78, by, 78, bh);
+    if (ui_button(ui, settings_r, "Settings", BUTTON_SECONDARY, true))
+        app_open_settings_modal(app);
+
+}
+
+static void draw_symptom_placeholder(App *app)
+{
+    Ui *ui = &app->ui;
+    float w = (float)ui->win_w, h = (float)ui->view_h;
+    UiRect card = ui_rect(24, 24, w - 48, h - 48);
+    ui_panel(ui, card, UI_PANEL);
+    ui_text(ui, card.x + 28, card.y + 26, 20, UI_TEXT, "Symptom Report");
+    ui_text(ui, card.x + 28, card.y + 56, 11, UI_MUTED,
+            "The anatomical body map and symptom cards will appear here.");
+    ui_text(ui, card.x + 28, card.y + 78, 9.5f, UI_FAINT,
+            "Use Ctrl/Cmd+1 for RF Check and Ctrl/Cmd+2 for Symptom Report.");
+}
+
 void app_draw(App *app)
 {
     Ui *ui = &app->ui;
     UiState s;
     snapshot(app, &s);
-    Layout l;
-    layout(app, &l);
 
     ui_background(ui);
-    ui->block_interactive = s.modal_open || s.remove_meter_open ||
-                            s.settings_modal_open || s.upload_modal_open ||
-                            s.model_modal_open;
-    draw_header(app, &s);
-    draw_transport(app, &s);
-    draw_runtime_banner(app, &s);
-    draw_camera_panel(app, &s, l.camera);
-    draw_cell_panel(app, &s, l.cells);
-    draw_meter_panel(app, &s, l.meters);
-    draw_footer(app, &s);
-    ui->block_interactive = false;
-    if (s.modal_open) draw_modal(app, &s);
-    if (s.remove_meter_open) draw_remove_modal(app, &s);
+    ui_set_viewport(ui, 0, ui->win_h);
+    ui->block_interactive = s.settings_modal_open || s.upload_modal_open;
+    draw_tab_bar(app);
+
+    if (s.active_tab == APP_TAB_RF) {
+        Layout l;
+        ui_set_viewport(ui, TABBAR_H, ui->win_h - (int)TABBAR_H);
+        layout(app, &l);
+        ui->block_interactive = s.modal_open || s.remove_meter_open ||
+                                s.settings_modal_open || s.upload_modal_open ||
+                                s.model_modal_open;
+        draw_header(app, &s);
+        draw_transport(app, &s);
+        draw_runtime_banner(app, &s);
+        draw_camera_panel(app, &s, l.camera);
+        draw_cell_panel(app, &s, l.cells);
+        draw_meter_panel(app, &s, l.meters);
+        draw_footer(app, &s);
+        ui->block_interactive = false;
+        if (s.modal_open) draw_modal(app, &s);
+        if (s.remove_meter_open) draw_remove_modal(app, &s);
+        if (s.model_modal_open) draw_model_modal(app, &s);
+    } else {
+        ui_set_viewport(ui, TABBAR_H, ui->win_h - (int)TABBAR_H);
+        ui->block_interactive = s.settings_modal_open || s.upload_modal_open;
+        draw_symptom_placeholder(app);
+        ui->block_interactive = false;
+    }
+
+    ui_set_viewport(ui, 0, ui->win_h);
     if (s.settings_modal_open) draw_settings_modal(app, &s);
     if (s.upload_modal_open) draw_upload_modal(app, &s);
-    if (s.model_modal_open) draw_model_modal(app, &s);
     draw_toast(app);
 }

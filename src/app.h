@@ -126,6 +126,11 @@ typedef struct {
     char sig[CS_PATH_MAX];
 } UploadJob;
 
+typedef enum {
+    APP_TAB_RF = 0,
+    APP_TAB_SYMPTOM = 1
+} AppTab;
+
 typedef struct App {
     /* options */
     bool train_mode;
@@ -249,6 +254,7 @@ typedef struct App {
     int burst_next;
     uint64_t burst_seq;
     bool paused;
+    int active_tab;
     bool session_active;
     bool session_write_failed;
     bool silent_export;
@@ -311,6 +317,8 @@ void app_retry_runtime(App *app);
 void app_toggle_pause(App *app);
 bool app_retry_camera(App *app, bool notify);
 void app_export_dataset(App *app);
+void app_set_tab(App *app, int tab);
+int app_get_tab(App *app);
 void app_notify(App *app, bool error, const char *fmt, ...);
 void app_copy_diagnostics(App *app);
 void app_save_window_png(App *app, const char *path);

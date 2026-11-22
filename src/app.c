@@ -682,6 +682,29 @@ void app_reset_identity(App *app)
     app_notify(app, !ok, "%s", message);
 }
 
+void app_set_tab(App *app, int tab)
+{
+    if (tab != APP_TAB_RF && tab != APP_TAB_SYMPTOM) return;
+    SDL_LockMutex(app->mu);
+    bool leaving_rf = app->active_tab == APP_TAB_RF && tab != APP_TAB_RF;
+    app->active_tab = tab;
+    if (leaving_rf) {
+        app->modal_open = false;
+        app->modal_checking = false;
+        app->remove_meter_open = false;
+        app->model_modal_open = false;
+    }
+    SDL_UnlockMutex(app->mu);
+}
+
+int app_get_tab(App *app)
+{
+    SDL_LockMutex(app->mu);
+    int tab = app->active_tab;
+    SDL_UnlockMutex(app->mu);
+    return tab;
+}
+
 void app_open_upload_modal(App *app)
 {
     SDL_LockMutex(app->mu);
@@ -995,7 +1018,7 @@ void app_print_usage(void)
         "  --demo                 Synthetic phone + synthetic meter feed (no hardware)\n"
         "  --autoplay             Start capture immediately (default: wait for play)\n"
         "  --demo-phone           Synthetic cell samples only\n"
-        "  --readme-fixture MODE  README screenshot fixture: main, live, best\n"
+        "  --readme-fixture MODE  README screenshot fixture: main, live, best, symptom\n"
         "  --image PATH           Use a still image instead of a webcam (testing)\n"
         "  --export-json PATH     Write both lists to JSON and exit (testing/automation)\n"
         "  --download-model REPO  Download a Hugging Face VLM and make it the reader\n"
@@ -1167,6 +1190,7 @@ AppArgsResult app_parse_args(App *app, int argc, char **argv, char *err, size_t 
                                      : strcmp(mode, "settings") == 0 ? 6
                                      : strcmp(mode, "upload") == 0 ? 7
                                      : strcmp(mode, "model") == 0 ? 8
+                                     : strcmp(mode, "symptom") == 0 ? 9
                                                                  : 1;
         } else if (strcmp(a, "--autoplay") == 0) {
             app->autoplay = true;
@@ -1513,6 +1537,7 @@ static void readme_fixture_seed(App *app)
         app->remove_meter_open = true;
         app->remove_meter_index = app->meter_count - 1;
     }
+    if (app->readme_fixture_mode == 9) app->active_tab = APP_TAB_SYMPTOM;
     SDL_UnlockMutex(app->mu);
 }
 
@@ -3505,6 +3530,14 @@ void app_handle_event(App *app, const SDL_Event *e)
     }
     ui_handle_event(&app->ui, e);
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
+        if (e->key.key == SDLK_1 && (e->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI))) {
+            app_set_tab(app, APP_TAB_RF);
+            return;
+        }
+        if (e->key.key == SDLK_2 && (e->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI))) {
+            app_set_tab(app, APP_TAB_SYMPTOM);
+            return;
+        }
         switch (e->key.key) {
             case SDLK_ESCAPE:
                 if (app->remove_meter_open) {
