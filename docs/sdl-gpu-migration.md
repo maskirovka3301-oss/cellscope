@@ -81,3 +81,17 @@ SDL_Renderer UI yet.
 SDL_shadercross discovery is wired as an optional CMake package. The next
 foundation step is to build/install SDL_shadercross and add the first real UI
 quad pipeline; until then the app continues to use its current renderer.
+
+## Graphics pipeline milestone
+
+`tools/gpu_ui_smoke.c` adds the first real SDL_GPU graphics pipeline:
+
+- MSL vertex/fragment shaders on macOS;
+- vertex buffer + transfer-buffer upload;
+- graphics pipeline creation;
+- bind and draw six vertices;
+- present a colored quad.
+
+It is a standalone validation target (`gpu_ui_smoke`) and does not replace the
+application UI yet. The next step is to build the general UI batcher and
+texture/text primitives on top of this pipeline.
