@@ -19,8 +19,8 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/symptom-body-map` | Temporary 2D front/back fallback until 3D is ready; retire it after 3D works. | `e4ec3de` |
 | `feature/anatomy-assets` | Download versioned 3D assets from a separate B2 bucket into the local cache, with SHA-512 verification, progress UI and offline fallback. | `734ab32` |
 | `feature/anatomy-b2-presign` | Add a Worker route that signs short-lived GETs for the private anatomy B2 bucket so the read-only key never enters the app. | |
-| `feature/sdl-gpu-foundation` | Replace SDL_Renderer with an SDL_GPU device/swapchain, shader pipeline, resize and screenshot foundation. | |
-| `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | |
+| `feature/sdl-gpu-foundation` | Replace SDL_Renderer with an SDL_GPU device/swapchain, shader pipeline, resize and screenshot foundation. | `49697a9` |
+| `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | `3df4c0a` |
 | `feature/sdl-gpu-3d` | Add the SDL_GPU 3D pipeline, textured male/female models, orbit/zoom and adaptive LOD. | |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | |
 | `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | |
