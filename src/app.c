@@ -31,6 +31,7 @@
 static void app_log(App *app, const char *fmt, ...);
 static void app_export_json_to(App *app, const char *path);
 static int cloud_status_thread(void *arg);
+static int upload_worker_thread(void *arg);
 static bool has_json_suffix(const char *path);
 static const char *file_basename(const char *path);
 static int SDLCALL cellscope_adb_thread(void *data);
@@ -525,6 +526,78 @@ static void append_upload_history_locked(App *app, const char *status,
     save_upload_history_locked(app);
 }
 
+static void upload_queue_path(App *app, char *out, size_t cap)
+{
+    cs_path_join(out, cap, app->capture_dir, "upload-queue.tsv");
+}
+
+static void save_upload_queue_locked(App *app)
+{
+    char path[CS_PATH_MAX];
+    upload_queue_path(app, path, sizeof(path));
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    for (int i = 0; i < app->upload_job_count; i++)
+        fprintf(f, "%s\t%s\n", app->upload_jobs[i].archive, app->upload_jobs[i].sig);
+    fclose(f);
+}
+
+static void load_upload_queue(App *app)
+{
+    char path[CS_PATH_MAX];
+    upload_queue_path(app, path, sizeof(path));
+    FILE *f = fopen(path, "rb");
+    if (!f) return;
+    char line[CS_PATH_MAX * 2];
+    while (fgets(line, sizeof(line), f) && app->upload_job_count < (int)CS_ARRAY_LEN(app->upload_jobs)) {
+        char *tab = strchr(line, '\t');
+        if (!tab) continue;
+        *tab++ = '\0';
+        char *nl = strpbrk(tab, "\r\n");
+        if (nl) *nl = '\0';
+        UploadJob *j = &app->upload_jobs[app->upload_job_count++];
+        cs_strlcpy(j->archive, line, sizeof(j->archive));
+        cs_strlcpy(j->sig, tab, sizeof(j->sig));
+    }
+    fclose(f);
+}
+
+static int upload_worker_thread(void *arg)
+{
+    App *app = (App *)arg;
+    while (!SDL_GetAtomicInt(&app->quit)) {
+        char api[512], archive[CS_PATH_MAX], sig[CS_PATH_MAX];
+        SDL_LockMutex(app->mu);
+        bool has = app->upload_job_count > 0;
+        if (has) {
+            cs_strlcpy(api, app->settings.upload_api_url, sizeof(api));
+            cs_strlcpy(archive, app->upload_jobs[0].archive, sizeof(archive));
+            cs_strlcpy(sig, app->upload_jobs[0].sig, sizeof(sig));
+        }
+        SDL_UnlockMutex(app->mu);
+        if (!has) {
+            SDL_Delay(3000);
+            continue;
+        }
+
+        char message[512] = {0};
+        bool ok = cloud_upload_archive(api, archive, sig, message, sizeof(message));
+        SDL_LockMutex(app->mu);
+        cs_strlcpy(app->upload_status, message, sizeof(app->upload_status));
+        append_upload_history_locked(app, ok ? "accepted" : "failed",
+                                     file_basename(archive), message);
+        if (ok) {
+            memmove(&app->upload_jobs[0], &app->upload_jobs[1],
+                    sizeof(app->upload_jobs[0]) * (app->upload_job_count - 1));
+            app->upload_job_count--;
+        }
+        save_upload_queue_locked(app);
+        SDL_UnlockMutex(app->mu);
+        SDL_Delay(ok ? 1000 : 15000);
+    }
+    return 0;
+}
+
 void app_enroll_device(App *app)
 {
     char message[512] = {0};
@@ -579,14 +652,21 @@ void app_upload_dataset(App *app)
         return;
     }
 
-    char message[512] = {0};
-    bool ok = cloud_upload_archive(api, archive, sig, message, sizeof(message));
     SDL_LockMutex(app->mu);
-    cs_strlcpy(app->upload_status, message, sizeof(app->upload_status));
-    append_upload_history_locked(app, ok ? "accepted" : "failed",
-                                 file_basename(archive), message);
+    if (app->upload_job_count < (int)CS_ARRAY_LEN(app->upload_jobs)) {
+        UploadJob *job = &app->upload_jobs[app->upload_job_count++];
+        cs_strlcpy(job->archive, archive, sizeof(job->archive));
+        cs_strlcpy(job->sig, sig, sizeof(job->sig));
+        save_upload_queue_locked(app);
+        snprintf(app->upload_status, sizeof(app->upload_status),
+                 "Queued %s for upload.", file_basename(archive));
+    } else {
+        cs_strlcpy(app->upload_status, "Upload queue is full.", sizeof(app->upload_status));
+    }
+    int queued = app->upload_job_count;
     SDL_UnlockMutex(app->mu);
-    app_notify(app, !ok, "%s", message);
+    app_notify(app, false, "Queued for upload (%d pending).", queued);
+    (void)api;
 }
 
 void app_open_upload_modal(App *app)
@@ -1500,6 +1580,7 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
     }
     cs_path_join(app->log_path, sizeof(app->log_path), app->capture_dir, "cellscope.log");
     load_upload_history(app);
+    load_upload_queue(app);
     find_asset_dir(app);
 
     app->mu = SDL_CreateMutex();
@@ -1644,6 +1725,8 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
 
     app_log(app, "started: assets=%s captures=%s vlm=%s", app->asset_dir, app->capture_dir,
             app->vlm_mode[0] ? app->vlm_mode : "auto");
+    app->upload_thread = SDL_CreateThread(upload_worker_thread, "upload-queue", app);
+    if (!app->upload_thread) app_log(app, "could not start upload queue thread");
     app->cloud_status_thread = SDL_CreateThread(cloud_status_thread, "cloud-status", app);
     if (!app->cloud_status_thread)
         app_log(app, "could not start cloud status thread");
@@ -1666,6 +1749,10 @@ void app_shutdown(App *app)
     if (app->vlm_thread) {
         SDL_WaitThread(app->vlm_thread, NULL);
         app->vlm_thread = NULL;
+    }
+    if (app->upload_thread) {
+        SDL_WaitThread(app->upload_thread, NULL);
+        app->upload_thread = NULL;
     }
     if (app->cloud_status_thread) {
         SDL_WaitThread(app->cloud_status_thread, NULL);
