@@ -34,6 +34,10 @@ void gpu_renderer_texture_rect(GpuRenderer *r, GpuTexture *tex, GpuRect dst, Gpu
 bool gpu_renderer_screenshot(GpuRenderer *r, const char *path);
 
 GpuTexture *gpu_texture_create(GpuRenderer *r, int w, int h);
+GpuTexture *gpu_texture_create_target(GpuRenderer *r, int w, int h);
+GpuTexture *gpu_texture_create_mipped(GpuRenderer *r, int w, int h);
+SDL_GPUDevice *gpu_renderer_device(GpuRenderer *r);
+SDL_GPUTexture *gpu_texture_raw(GpuTexture *tex);
 void gpu_texture_update(GpuTexture *tex, const void *rgba, int pitch);
 void gpu_texture_destroy(GpuRenderer *r, GpuTexture *tex);
 int gpu_texture_width(const GpuTexture *tex);

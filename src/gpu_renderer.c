@@ -17,6 +17,8 @@ typedef struct {
 struct GpuTexture {
     SDL_GPUTexture *tex;
     int w, h;
+    Uint32 levels;
+    bool mips_dirty;
     bool dirty;
     unsigned char *pending;
     int pending_pitch;
@@ -86,21 +88,23 @@ static bool make_shader(SDL_GPUDevice *gpu, SDL_GPUShaderStage stage, SDL_GPUSha
     return *out != NULL;
 }
 
-static GpuTexture *texture_new(GpuRenderer *r, int w, int h)
+static GpuTexture *texture_new_levels(GpuRenderer *r, int w, int h,
+                                      SDL_GPUTextureUsageFlags usage, Uint32 levels)
 {
     if (w <= 0 || h <= 0) return NULL;
     GpuTexture *t = calloc(1, sizeof(*t));
     if (!t) return NULL;
     t->w = w;
     t->h = h;
+    t->levels = levels > 0 ? levels : 1;
     SDL_GPUTextureCreateInfo ti = {0};
     ti.type = SDL_GPU_TEXTURETYPE_2D;
     ti.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    ti.usage = usage;
     ti.width = (Uint32)w;
     ti.height = (Uint32)h;
     ti.layer_count_or_depth = 1;
-    ti.num_levels = 1;
+    ti.num_levels = t->levels;
     t->tex = SDL_CreateGPUTexture(r->gpu, &ti);
     if (!t->tex) {
         free(t);
@@ -117,10 +121,32 @@ static GpuTexture *texture_new(GpuRenderer *r, int w, int h)
     return t;
 }
 
+static GpuTexture *texture_new(GpuRenderer *r, int w, int h)
+{
+    return texture_new_levels(r, w, h, SDL_GPU_TEXTUREUSAGE_SAMPLER, 1);
+}
+
 GpuTexture *gpu_texture_create(GpuRenderer *r, int w, int h)
 {
     return texture_new(r, w, h);
 }
+
+GpuTexture *gpu_texture_create_target(GpuRenderer *r, int w, int h)
+{
+    return texture_new_levels(r, w, h,
+                              SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET, 1);
+}
+
+GpuTexture *gpu_texture_create_mipped(GpuRenderer *r, int w, int h)
+{
+    Uint32 levels = 1;
+    int m = w > h ? w : h;
+    while (m > 1) { m >>= 1; levels++; }
+    return texture_new_levels(r, w, h, SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET, levels);
+}
+
+SDL_GPUDevice *gpu_renderer_device(GpuRenderer *r) { return r ? r->gpu : NULL; }
+SDL_GPUTexture *gpu_texture_raw(GpuTexture *t) { return t ? t->tex : NULL; }
 
 void gpu_texture_update(GpuTexture *t, const void *rgba, int pitch)
 {
@@ -133,6 +159,7 @@ void gpu_texture_update(GpuTexture *t, const void *rgba, int pitch)
                (size_t)t->w * 4);
     t->pending_pitch = t->w * 4;
     t->dirty = true;
+    if (t->levels > 1) t->mips_dirty = true;
 }
 
 void gpu_texture_destroy(GpuRenderer *r, GpuTexture *t)
@@ -225,6 +252,8 @@ GpuRenderer *gpu_renderer_create(SDL_Window *win, char *err, size_t err_cap)
     si.mag_filter = SDL_GPU_FILTER_LINEAR;
     si.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    si.max_lod = 100.0f;
     r->sampler = SDL_CreateGPUSampler(r->gpu, &si);
     SDL_GPUBufferCreateInfo bci = {0};
     bci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
@@ -435,6 +464,13 @@ bool gpu_renderer_end(GpuRenderer *r)
     SDL_GPUBufferRegion dst = {r->vbo, 0, (Uint32)(sizeof(Vertex) * r->vert_count)};
     SDL_UploadToGPUBuffer(copy, &src, &dst, false);
     SDL_EndGPUCopyPass(copy);
+    for (int i = 0; i < r->texture_count; i++) {
+        GpuTexture *t = r->textures[i];
+        if (t->mips_dirty && t->levels > 1) {
+            SDL_GenerateMipmapsForGPUTexture(r->cmd, t->tex);
+            t->mips_dirty = false;
+        }
+    }
     SDL_GPUColorTargetInfo ct = {0};
     ct.texture = r->swap;
     ct.clear_color = (SDL_FColor){0.03f, 0.04f, 0.05f, 1.0f};

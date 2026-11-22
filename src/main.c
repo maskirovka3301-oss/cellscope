@@ -176,6 +176,7 @@ int main(int argc, char **argv)
         if (!running) break;
 
         app_update(app);
+        anatomy_3d_frame(app);
         if (SDL_GetAtomicInt(&app->quit)) {
             running = false;
             break;

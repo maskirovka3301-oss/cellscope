@@ -1,5 +1,6 @@
 #include "symptom_ui.h"
 #include "anatomy_assets.h"
+#include "anatomy_3d.h"
 #include "ui.h"
 
 #include <math.h>
@@ -420,10 +421,13 @@ void symptom_ui_draw(App *app)
         add_card(app, SYMPTOM_CARD_NON_PHYSICAL, -1, 0, 0, false);
     }
 
-    /* Front/back toggles */
-    float tx = left_w - 172;
-    draw_view_toggle(app, ui_rect(tx, 14, 72, 30), "Front", 0);
-    draw_view_toggle(app, ui_rect(tx + 80, 14, 72, 30), "Back", 1);
+    bool use3d = anatomy_3d_available(app->anatomy) && app->symptom_zoom_region < 0;
+    /* Front/back toggles only apply to the 2D fallback. */
+    if (!use3d) {
+        float tx = left_w - 172;
+        draw_view_toggle(app, ui_rect(tx, 14, 72, 30), "Front", 0);
+        draw_view_toggle(app, ui_rect(tx + 80, 14, 72, 30), "Back", 1);
+    }
 
     float body_y = 96;
     float body_h = h - body_y - 18;
@@ -446,6 +450,18 @@ void symptom_ui_draw(App *app)
         int hit = region_at(&m, mx, my, app->symptom_body_view);
         if (hit >= 0) hover = hit;
     }
+    if (use3d) {
+        GpuTexture *tex = anatomy_3d_texture(app->anatomy);
+        if (tex) {
+            gpu_renderer_texture_rect(ui->r, tex,
+                                      (GpuRect){body_x, body_y, body_w, body_h}, UI_WHITE);
+            int sel = anatomy_3d_selection(app->anatomy);
+            ui_text_center(ui, FONT_MONO, body_x + body_w * 0.30f, body_y + body_h - 22,
+                           10.0f, sel == 0 ? UI_ACCENT : UI_MUTED, "Female");
+            ui_text_center(ui, FONT_MONO, body_x + body_w * 0.70f, body_y + body_h - 22,
+                           10.0f, sel == 1 ? UI_ACCENT : UI_MUTED, "Male");
+        }
+    } else {
     UiRect body_clip = ui_rect(0, body_y - 4, left_w, body_h + 8);
     ui_push_clip(ui, body_clip);
     draw_region_overlays(&m, app, hover);
@@ -507,6 +523,7 @@ void symptom_ui_draw(App *app)
     if (app->symptom_pending_region >= 0 && cs_epoch_ms() - app->symptom_pending_ms > 260)
         commit_pending(app);
 
+    }
     draw_card_list(app, split + 22, 18, w - split - 44, h - 36);
 
     bool downloading, failed, ready;
