@@ -140,14 +140,14 @@ jobs:
 
   release:
     name: Publish release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/release/') || github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
     steps:
-      - name: Check out main with tags
+      - name: Check out release commit with tags
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -155,13 +155,24 @@ jobs:
       - name: Resolve release tag
         id: release_tag
         run: |
-          tag=$(git describe --tags --exact-match HEAD 2>/dev/null || true)
-          if [ -n "$tag" ] && echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+          tag=""
+          if [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            branch="${GITHUB_REF#refs/heads/release/}"
+            if [[ "$branch" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              tag="v${branch#v}"
+            else
+              echo "Release branches must be named release/x.y.z or release/vx.y.z" >&2
+              exit 1
+            fi
+          else
+            tag=$(git describe --tags --exact-match HEAD 2>/dev/null || true)
+          fi
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
-            echo "Publishing $tag" >> "$GITHUB_STEP_SUMMARY"
+            echo "Publishing/refreshing $tag" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "No semantic version tag on HEAD; this is a build-only main push." >> "$GITHUB_STEP_SUMMARY"
+            echo "No semantic version tag on this main commit; build only." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Download platform artifacts
@@ -182,7 +193,7 @@ jobs:
             printf -- '- Windows x86_64\n'
           } > release-notes.md
 
-      - name: Create GitHub release
+      - name: Create or refresh GitHub release
         if: steps.release_tag.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
