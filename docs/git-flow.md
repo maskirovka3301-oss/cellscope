@@ -122,6 +122,7 @@ git push origin --delete release/1.0.0
 
 ## CI behavior
 
+- `develop` push: no build. Use a pull request to `develop` for CI checks.
 - `release/**` push: build and test all platforms. If all pass, create the
   `vX.Y.Z` tag and publish the GitHub release with packaged artifacts.
 - `main` push with a semantic tag exactly on `HEAD`: rebuild and refresh the
