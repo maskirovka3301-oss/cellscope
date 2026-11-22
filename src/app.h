@@ -137,7 +137,8 @@ typedef enum {
 typedef enum {
     SYMPTOM_CARD_REGION = 0,
     SYMPTOM_CARD_WHOLE_BODY = 1,
-    SYMPTOM_CARD_NON_PHYSICAL = 2
+    SYMPTOM_CARD_NON_PHYSICAL = 2,
+    SYMPTOM_CARD_MUSCLE = 3
 } SymptomCardKind;
 
 typedef struct {
@@ -145,6 +146,9 @@ typedef struct {
     int region;
     float point_x;
     float point_y;
+    float point_z;
+    char code[16];
+    char region_name[32];
     float marker_x;
     float marker_y;
     bool has_point;

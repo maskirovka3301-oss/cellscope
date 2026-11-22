@@ -11,6 +11,8 @@
 
 #include "app.h"
 #include "anatomy_shaders.h"
+#include "muscle_codes.h"
+#include "symptom_ui.h"
 #include "util.h"
 
 typedef struct { float p[3], n[3], u[2]; } Vertex;
@@ -37,6 +39,14 @@ struct Anatomy3D {
     bool dragging;
     float last_x, last_y;
     int selected; /* -1 both, 0 female, 1 male */
+    bool press_active;
+    bool press_moved;
+    float press_x, press_y;
+    Vertex *cpu_verts;
+    Uint32 *cpu_indices;
+    Uint32 cpu_vert_count, cpu_index_count;
+    unsigned char *tex_pixels;
+    int tex_w, tex_h;
 };
 
 static void mat_identity(float m[16])
@@ -165,6 +175,18 @@ static const char *find_model_path(App *app)
                  "assets/3d/ecorche-musclenames-male-female-anatomy/"
                  "Écorché Musclenames Male & Female Anatomy.glb");
     return cs_file_exists(path) ? path : NULL;
+}
+
+static void free_cpu_model(Anatomy3D *a)
+{
+    free(a->cpu_verts);
+    free(a->cpu_indices);
+    free(a->tex_pixels);
+    a->cpu_verts = NULL;
+    a->cpu_indices = NULL;
+    a->tex_pixels = NULL;
+    a->cpu_vert_count = a->cpu_index_count = 0;
+    a->tex_w = a->tex_h = 0;
 }
 
 static bool load_model(Anatomy3D *a)
@@ -306,17 +328,24 @@ static bool load_model(Anatomy3D *a)
             if (pixels) {
                 a->texture = gpu_texture_create_mipped(a->r, w, h2);
                 if (a->texture) gpu_texture_update(a->texture, pixels, w * 4);
-                stbi_image_free(pixels);
+                a->tex_pixels = pixels;
+                a->tex_w = w;
+                a->tex_h = h2;
             }
         }
     }
     if (!a->texture) {
         a->texture = gpu_texture_create(a->r, 1, 1);
-        unsigned char px[4] = {220, 200, 190, 255};
+        unsigned char *px = malloc(4);
+        px[0] = 220; px[1] = 200; px[2] = 190; px[3] = 255;
         if (a->texture) gpu_texture_update(a->texture, px, 4);
+        a->tex_pixels = px;
+        a->tex_w = a->tex_h = 1;
     }
-    free(verts);
-    free(indices);
+    a->cpu_verts = verts;
+    a->cpu_indices = indices;
+    a->cpu_vert_count = vert_count;
+    a->cpu_index_count = idx_count;
     cgltf_free(data);
     a->loaded = true;
     return true;
@@ -413,6 +442,7 @@ void anatomy_3d_destroy(Anatomy3D *a)
 {
     if (!a) return;
     SDL_GPUDevice *gpu = gpu_renderer_device(a->r);
+    free_cpu_model(a);
     if (a->color) gpu_texture_destroy(a->r, a->color);
     if (a->depth) SDL_ReleaseGPUTexture(gpu, a->depth);
     if (a->texture) gpu_texture_destroy(a->r, a->texture);
@@ -428,6 +458,98 @@ void anatomy_3d_destroy(Anatomy3D *a)
 bool anatomy_3d_available(const Anatomy3D *a) { return a && a->loaded && a->pipeline; }
 GpuTexture *anatomy_3d_texture(const Anatomy3D *a) { return a ? a->color : NULL; }
 int anatomy_3d_selection(const Anatomy3D *a) { return a ? a->selected : -1; }
+
+bool anatomy_3d_pick(App *app, float mx, float my, AnatomyPick *out)
+{
+    Anatomy3D *a = app->anatomy;
+    if (!a || !a->loaded || !out || a->cpu_vert_count == 0 || a->cpu_index_count == 0)
+        return false;
+    float tw = (float)a->target_w, th = (float)a->target_h;
+    if (mx < 0 || my < 0 || mx >= tw || my >= th) return false;
+
+    float rad_yaw = a->yaw * 3.14159265f / 180.0f;
+    float rad_pitch = a->pitch * 3.14159265f / 180.0f;
+    float eye[3] = {sinf(rad_yaw) * cosf(rad_pitch) * a->distance,
+                    sinf(rad_pitch) * a->distance,
+                    cosf(rad_yaw) * cosf(rad_pitch) * a->distance};
+    float center[3] = {0, 0, 0}, up[3] = {0, 1, 0};
+    float fwd[3], right[3], cam_up[3];
+    vec3_sub(fwd, center, eye);
+    vec3_norm(fwd);
+    vec3_cross(right, fwd, up);
+    vec3_norm(right);
+    vec3_cross(cam_up, right, fwd);
+
+    float aspect = tw / th;
+    float tan_half = tanf(45.0f * 3.14159265f / 360.0f);
+    float nx = (mx / tw) * 2.0f - 1.0f;
+    float ny = 1.0f - (my / th) * 2.0f;
+    float dir[3];
+    for (int i = 0; i < 3; i++)
+        dir[i] = fwd[i] + right[i] * (nx * tan_half * aspect) + cam_up[i] * (ny * tan_half);
+    vec3_norm(dir);
+
+    float best_t = 1e30f, best_u = 0, best_v = 0;
+    Uint32 best_i = 0;
+    bool hit = false;
+    for (Uint32 i = 0; i + 2 < a->cpu_index_count; i += 3) {
+        const Vertex *v0 = &a->cpu_verts[a->cpu_indices[i]];
+        const Vertex *v1 = &a->cpu_verts[a->cpu_indices[i + 1]];
+        const Vertex *v2 = &a->cpu_verts[a->cpu_indices[i + 2]];
+        float e1[3], e2[3], h[3], sv[3], q[3];
+        vec3_sub(e1, v1->p, v0->p);
+        vec3_sub(e2, v2->p, v0->p);
+        vec3_cross(h, dir, e2);
+        float det = vec3_dot(e1, h);
+        if (fabsf(det) < 0.000001f) continue;
+        float inv = 1.0f / det;
+        vec3_sub(sv, eye, v0->p);
+        float u = inv * vec3_dot(sv, h);
+        if (u < 0 || u > 1) continue;
+        vec3_cross(q, sv, e1);
+        float v = inv * vec3_dot(dir, q);
+        if (v < 0 || u + v > 1) continue;
+        float t = inv * vec3_dot(e2, q);
+        if (t <= 0.01f || t >= best_t) continue;
+        best_t = t;
+        best_u = u;
+        best_v = v;
+        best_i = i;
+        hit = true;
+    }
+    if (!hit) return false;
+
+    const Vertex *v0 = &a->cpu_verts[a->cpu_indices[best_i]];
+    const Vertex *v1 = &a->cpu_verts[a->cpu_indices[best_i + 1]];
+    const Vertex *v2 = &a->cpu_verts[a->cpu_indices[best_i + 2]];
+    float w = 1.0f - best_u - best_v;
+    float uv[2] = {
+        v0->u[0] * w + v1->u[0] * best_u + v2->u[0] * best_v,
+        v0->u[1] * w + v1->u[1] * best_u + v2->u[1] * best_v,
+    };
+    float pos[3];
+    for (int i = 0; i < 3; i++) pos[i] = eye[i] + dir[i] * best_t;
+
+    int px = (int)(uv[0] * a->tex_w);
+    int py = (int)(uv[1] * a->tex_h);
+    if (px < 0) px = 0;
+    if (py < 0) py = 0;
+    if (px >= a->tex_w) px = a->tex_w - 1;
+    if (py >= a->tex_h) py = a->tex_h - 1;
+    const char *code = "MUS";
+    if (a->tex_pixels && a->tex_w > 0 && a->tex_h > 0) {
+        unsigned char *p = a->tex_pixels + ((size_t)py * a->tex_w + px) * 4;
+        code = muscle_code_for_color(p[0], p[1], p[2]);
+    }
+    snprintf(out->code, sizeof(out->code), "%s", code);
+    snprintf(out->region, sizeof(out->region), "%s", muscle_region_for_code(code));
+    out->x = pos[0];
+    out->y = pos[1];
+    out->z = pos[2];
+    out->u = uv[0];
+    out->v = uv[1];
+    return true;
+}
 
 void anatomy_3d_frame(App *app)
 {
@@ -451,12 +573,19 @@ void anatomy_3d_frame(App *app)
     /* The viewport buttons occupy the top strip; do not orbit when using them. */
     bool inside = mx >= body_x && mx <= body_x + body_w && my >= 56.0f &&
                   my <= body_y + body_h;
+    bool do_pick = false;
     if (inside && ui->mouse_pressed) {
         int side = mx < body_x + body_w * 0.5f ? 0 : 1;
         a->selected = a->selected == side ? -1 : side;
+        a->press_active = true;
+        a->press_moved = false;
+        a->press_x = mx;
+        a->press_y = my;
     }
     if (inside) {
-        if (ui->mouse_down) {
+        if (ui->mouse_down && a->press_active) {
+            if (fabsf(mx - a->press_x) > 4.0f || fabsf(my - a->press_y) > 4.0f)
+                a->press_moved = true;
             if (!a->dragging) {
                 a->dragging = true;
                 a->last_x = mx;
@@ -470,14 +599,22 @@ void anatomy_3d_frame(App *app)
                 a->last_x = mx;
                 a->last_y = my;
             }
-        } else a->dragging = false;
+        } else {
+            a->dragging = false;
+        }
         if (ui->wheel != 0) {
             a->distance -= ui->wheel * 0.16f;
             if (a->distance < 2.4f) a->distance = 2.4f;
             if (a->distance > 7.0f) a->distance = 7.0f;
             ui->wheel = 0;
         }
-    } else a->dragging = false;
+    } else {
+        a->dragging = false;
+    }
+    if (!ui->mouse_down) {
+        if (a->press_active && ui->mouse_released && !a->press_moved) do_pick = true;
+        a->press_active = false;
+    }
     if (!ensure_target(a, tw, th)) return;
 
     float rad_yaw = a->yaw * 3.14159265f / 180.0f;
@@ -523,4 +660,9 @@ void anatomy_3d_frame(App *app)
     }
     SDL_EndGPURenderPass(pass);
     SDL_SubmitGPUCommandBuffer(cmd);
+    if (do_pick) {
+        AnatomyPick pick;
+        if (anatomy_3d_pick(app, a->press_x, a->press_y, &pick))
+            symptom_add_muscle_card(app, &pick);
+    }
 }

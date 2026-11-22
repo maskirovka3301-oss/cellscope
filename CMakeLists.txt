@@ -85,6 +85,7 @@ set(CELLSCOPE_SOURCES
   src/ui.c
   src/gpu_renderer.c
   src/anatomy_3d.c
+  src/muscle_codes.c
   src/fonts.c
   src/proc.c
   src/runtime.c
