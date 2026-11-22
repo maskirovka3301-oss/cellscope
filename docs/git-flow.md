@@ -57,7 +57,27 @@ publish from a feature branch.
 
 ## Release branch and build check
 
-When every planned feature is merged into `develop`:
+## Pre-release review gate
+
+Before creating a release branch, the integrated `develop` build must be reviewed
+with the user.
+
+1. Build the current `develop` state.
+2. Show the user the build, screenshots or affected screens, and a summary of the
+   user-visible changes.
+3. Collect the final cosmetic fixes and small changes.
+4. Apply those fixes, rebuild, and repeat until the user explicitly says they are
+   happy with the result.
+5. Only then create and push `release/x.y.z`.
+
+Do not create, merge or push a release branch before this sign-off. A passing CI
+build is not approval. The back-and-forth review is mandatory for every release
+and may take several rounds. Feature integration into `develop` continues
+normally during this phase; the gate is specifically before `develop` becomes a
+release branch.
+
+When every planned feature is merged into `develop` and the review gate has
+passed:
 
 ```bash
 git checkout develop
@@ -120,3 +140,5 @@ git push origin --delete release/1.0.0
 - Do not use `--force` on shared branches.
 - Keep `RELEASE.md` current with feature descriptions and completed commit
   hashes.
+- Do not start a release branch until the user has explicitly approved the
+  integrated `develop` build after the cosmetic/small-change review.
