@@ -133,3 +133,15 @@ onto it.
 
 This is the text layer the real UI port will use. Remaining steps are the
 persistent atlas/eviction policy and replacing `ui.c`'s per-string textures.
+
+## UI port branch
+
+`feature/sdl-gpu-ui` has started. It adds `src/gpu_ui.c/h`:
+
+- GPU UI frame lifecycle;
+- batched solid rectangle pass;
+- `gpu_frame_smoke` validation target.
+
+This branch is intentionally incomplete and is not merged. The application
+still uses SDL_Renderer; text, clipping, textures and the real screens must be
+ported before the renderer switch.
