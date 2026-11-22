@@ -80,7 +80,7 @@ The Windows build is produced as an unsigned artifact, then the
    signature is not `Valid`;
 5. repackages the signed zip and replaces the `cellscope-Windows` artifact.
 
-Signing is attempted on every `main`, `release/**` and `develop` push. If any
+Signing is attempted on every `main` and `release/**` push. If any
 signing step fails, the unsigned Windows package remains in place, the job
 reports `signed=false`, and the release notes contain:
 
