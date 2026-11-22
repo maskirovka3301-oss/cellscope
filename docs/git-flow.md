@@ -55,8 +55,6 @@ git push origin develop
 Update `RELEASE.md` with the feature branch's final commit hash. Do not tag or
 publish from a feature branch.
 
-## Release branch and build check
-
 ## Pre-release review gate
 
 Before creating a release branch, the integrated `develop` build must be reviewed
@@ -85,6 +83,8 @@ git pull --ff-only
 git checkout -b release/1.0.0
 git push origin release/1.0.0
 ```
+
+## Release branch and build check
 
 A push to `release/**` runs the multi-platform workflow. If the macOS, Linux
 and Windows builds pass, the workflow creates the `vX.Y.Z` tag and a GitHub
