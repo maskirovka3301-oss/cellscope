@@ -1,7 +1,5 @@
 # CellScope
 
-**Current version:** `0.3.0`
-
 ## Origin and research mission
 
 CellScope was created by **Daniel R. Azulay** for **Radio Defense** to make a
@@ -163,41 +161,12 @@ Face if you download an HF model.
 
 ## Build
 
-### Versioning and production releases
+### Git flow
 
-CellScope uses semantic versioning:
-
-- A normal commit bumps the **patch** version through `.githooks/pre-commit`.
-- `scripts/release.sh` bumps the **minor** version.
-- Adding `--publish` bumps the **major** version and marks the release
-  production-ready.
-
-Install the commit hook once:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-The release helper builds through GitHub Actions for one or all platforms:
-
-```bash
-./scripts/release.sh --os All
-./scripts/release.sh --os macOS
-./scripts/release.sh --os Linux --publish
-```
-
-It updates the version in `CMakeLists.txt`, the README and the workflow's
-fallback version, commits and pushes the change, syncs the
-`Radio-Defense/cellscope` fork from the upstream repository, dispatches
-`cmake-multi-platform.yml` in the fork, and opens the fork's run in the browser.
-The resulting releases are created under `Radio-Defense/cellscope`.
-
-Releases without `--publish` are marked **non-production ready** and GitHub
-pre-releases. Releases with `--publish` are marked **production ready**. Release
-titles use the form `CellScope v0.1.0`.
-
-It requires a clean `main` branch and an authenticated GitHub CLI account with
-owner access to `Radio-Defense`.
+CellScope uses the branch and release process documented in
+[`docs/git-flow.md`](docs/git-flow.md). Feature work goes through
+`feature/*`, then `develop`, then `release/*`, and only a tagged `main` commit
+publishes binaries. The next release plan is tracked in `RELEASE.md`.
 
 ### macOS
 

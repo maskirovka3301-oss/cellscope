@@ -2,73 +2,33 @@ name: CMake multi-platform
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+      - "release/**"
   pull_request:
-    branches: ["main"]
+    branches:
+      - main
+      - develop
   workflow_dispatch:
-    inputs:
-      os:
-        description: "Operating system to build (or all)"
-        required: true
-        type: choice
-        options:
-          - all
-          - macOS
-          - Linux
-          - Windows
-        default: all
-      version:
-        description: "Release tag (e.g. v0.3.0). Leave empty for auto-generated tag."
-        required: false
-        type: string
-        default: ""
-      publish:
-        description: "Mark the release production-ready"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      built_at: ${{ steps.timestamp.outputs.built_at }}
-    steps:
-      - name: Set build timestamp
-        id: timestamp
-        run: echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - name: Set matrix
-        id: set-matrix
-        run: |
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ github.event.inputs.os }}" == "all" ]]; then
-            echo 'matrix={"include":[{"name":"macOS","os":"macos-15"},{"name":"Linux","os":"ubuntu-24.04"},{"name":"Windows","os":"windows-2022"}]}' >> "$GITHUB_OUTPUT"
-          else
-            case "${{ github.event.inputs.os }}" in
-              macOS)
-                echo 'matrix={"include":[{"name":"macOS","os":"macos-15"}]}' >> "$GITHUB_OUTPUT"
-                ;;
-              Linux)
-                echo 'matrix={"include":[{"name":"Linux","os":"ubuntu-24.04"}]}' >> "$GITHUB_OUTPUT"
-                ;;
-              Windows)
-                echo 'matrix={"include":[{"name":"Windows","os":"windows-2022"}]}' >> "$GITHUB_OUTPUT"
-                ;;
-            esac
-          fi
-
   build:
     name: ${{ matrix.name }}
-    needs: prepare
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      matrix:
+        include:
+          - name: macOS
+            os: macos-15
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2022
 
     steps:
       - name: Check out sources
@@ -180,52 +140,56 @@ jobs:
 
   release:
     name: Publish release
-    if: github.event_name == 'workflow_dispatch'
-    needs: [prepare, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
     steps:
+      - name: Check out main with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release_tag
+        run: |
+          tag=$(git describe --tags --exact-match HEAD 2>/dev/null || true)
+          if [ -n "$tag" ] && echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "Publishing $tag" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "No semantic version tag on HEAD; this is a build-only main push." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Download platform artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
-      - name: List release files
-        run: find dist -maxdepth 2 -type f -print
-
       - name: Compose release notes
-        env:
-          PUBLISH: ${{ inputs.publish }}
-          OS_INPUT: ${{ inputs.os || 'all' }}
-          BUILT_AT: ${{ needs.prepare.outputs.built_at }}
+        if: steps.release_tag.outputs.tag != ''
         run: |
-          if [ "$PUBLISH" = "true" ]; then
-            status="Production ready."
-          else
-            status="Non-production ready."
-          fi
           {
-            printf '**%s**\n\n' "$status"
+            printf '**Production ready.**\n\n'
             printf 'Automated multi-platform production build of CellScope.\n\n'
-            printf 'Built at %s for:\n\n' "$BUILT_AT"
-            case "$OS_INPUT" in
-              macOS) printf -- '- Mac OS (Apple silicon)\n' ;;
-              Linux) printf -- '- Linux x86_64\n' ;;
-              Windows) printf -- '- Windows x86_64\n' ;;
-              *) printf -- '- Mac OS (Apple silicon)\n- Linux x86_64\n- Windows x86_64\n' ;;
-            esac
+            printf 'Built at %s from %s for:\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${GITHUB_SHA}"
+            printf -- '- Mac OS (Apple silicon)\n'
+            printf -- '- Linux x86_64\n'
+            printf -- '- Windows x86_64\n'
           } > release-notes.md
 
       - name: Create GitHub release
+        if: steps.release_tag.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.event.inputs.version || format('v0.3.0-build.{0}', github.run_number) }}
-          name: CellScope ${{ github.event.inputs.version || 'v0.3.0' }}
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: CellScope ${{ steps.release_tag.outputs.tag }}
           body_path: release-notes.md
           files: dist/*
           fail_on_unmatched_files: true
-          prerelease: ${{ !inputs.publish }}
+          prerelease: false
