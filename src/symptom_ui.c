@@ -411,17 +411,27 @@ void symptom_ui_draw(App *app)
     ui_line(ui, split - 2.5f, 0, split - 2.5f, h, UI_COLOR(21, 30, 38, 150), 1);
     ui_line(ui, split + 1.5f, 0, split + 1.5f, h, UI_COLOR(45, 59, 71, 120), 1);
 
-    /* Top-left symptom actions */
+    bool use3d = anatomy_3d_available(app->anatomy) && app->symptom_zoom_region < 0;
+
+    /* The 3D viewport owns the complete left half of the tab. */
+    if (use3d) {
+        GpuTexture *tex = anatomy_3d_texture(app->anatomy);
+        if (tex)
+            gpu_renderer_texture_rect(ui->r, tex,
+                                      (GpuRect){0, ui->origin_y, left_w, h}, UI_WHITE);
+    }
+
+    /* These actions are drawn after the viewport and therefore sit on top. */
     UiRect whole = ui_rect(18, 14, 198, 30);
     if (ui_button(ui, whole, "Add whole body symptom", BUTTON_SECONDARY, true)) {
         add_card(app, SYMPTOM_CARD_WHOLE_BODY, -1, 0, 0, false);
     }
-    UiRect nonphysical = ui_rect(18, 50, 198, 30);
+    UiRect nonphysical = use3d ? ui_rect(left_w - 18 - 198, 14, 198, 30)
+                               : ui_rect(18, 50, 198, 30);
     if (ui_button(ui, nonphysical, "Add non-physical symptom", BUTTON_SECONDARY, true)) {
         add_card(app, SYMPTOM_CARD_NON_PHYSICAL, -1, 0, 0, false);
     }
 
-    bool use3d = anatomy_3d_available(app->anatomy) && app->symptom_zoom_region < 0;
     /* Front/back toggles only apply to the 2D fallback. */
     if (!use3d) {
         float tx = left_w - 172;
@@ -429,101 +439,97 @@ void symptom_ui_draw(App *app)
         draw_view_toggle(app, ui_rect(tx + 80, 14, 72, 30), "Back", 1);
     }
 
-    float body_y = 96;
-    float body_h = h - body_y - 18;
-    float body_w = body_h * 0.48f;
-    if (body_w > left_w - 100) body_w = left_w - 100;
-    float body_x = (left_w - body_w) * 0.5f;
-
-    BodyMap m = {body_x, body_y, body_w, body_h, 1.0f, 0.5f, 0.5f};
-    if (app->symptom_zoom_region >= 0 && app->symptom_zoom_region < REGION_COUNT) {
-        const BodyRegion *zr = &REGIONS[app->symptom_zoom_region];
-        m.scale = 2.2f;
-        m.cx = zr->x + zr->w * 0.5f;
-        m.cy = zr->y + zr->h * 0.5f;
-    }
-    float mx = ui->mx;
-    float my = ui->my - ui->origin_y;
-    int hover = -1;
-    if (app->symptom_zoom_region < 0 && mx >= m.bx && mx <= m.bx + m.bw &&
-        my >= m.by && my <= m.by + m.bh) {
-        int hit = region_at(&m, mx, my, app->symptom_body_view);
-        if (hit >= 0) hover = hit;
-    }
     if (use3d) {
-        GpuTexture *tex = anatomy_3d_texture(app->anatomy);
-        if (tex) {
-            gpu_renderer_texture_rect(ui->r, tex,
-                                      (GpuRect){body_x, body_y, body_w, body_h}, UI_WHITE);
-            int sel = anatomy_3d_selection(app->anatomy);
-            ui_text_center(ui, FONT_MONO, body_x + body_w * 0.30f, body_y + body_h - 22,
-                           10.0f, sel == 0 ? UI_ACCENT : UI_MUTED, "Female");
-            ui_text_center(ui, FONT_MONO, body_x + body_w * 0.70f, body_y + body_h - 22,
-                           10.0f, sel == 1 ? UI_ACCENT : UI_MUTED, "Male");
-        }
+        int sel = anatomy_3d_selection(app->anatomy);
+        ui_text_center(ui, FONT_MONO, left_w * 0.30f, h - 22, 10.0f,
+                       sel == 0 ? UI_ACCENT : UI_MUTED, "Female");
+        ui_text_center(ui, FONT_MONO, left_w * 0.70f, h - 22, 10.0f,
+                       sel == 1 ? UI_ACCENT : UI_MUTED, "Male");
     } else {
-    UiRect body_clip = ui_rect(0, body_y - 4, left_w, body_h + 8);
-    ui_push_clip(ui, body_clip);
-    draw_region_overlays(&m, app, hover);
-    draw_body(&m, app);
-    draw_region_overlays(&m, app, hover);
-    draw_markers(&m, app);
-    ui_pop_clip(ui);
+        float body_y = 96;
+        float body_h = h - body_y - 18;
+        float body_w = body_h * 0.48f;
+        if (body_w > left_w - 100) body_w = left_w - 100;
+        float body_x = (left_w - body_w) * 0.5f;
 
-    /* Marker clicks focus their card. */
-    if (app->symptom_zoom_region < 0 && ui->mouse_pressed && mx >= m.bx && mx <= m.bx + m.bw &&
-        my >= m.by && my <= m.by + m.bh) {
-        for (int i = 0; i < app->symptom_card_count; i++) {
-            SymptomCard *c = &app->symptom_cards[i];
-            if (!card_is_region(c) || c->region < 0 ||
-                REGIONS[c->region].view != app->symptom_body_view) continue;
-            float cx = bmx(&m, c->marker_x), cy = bmy(&m, c->marker_y);
-            if ((mx - cx) * (mx - cx) + (my - cy) * (my - cy) <= 144) {
-                app->symptom_focus_card = i;
-                ui_consume_click(ui);
+        BodyMap m = {body_x, body_y, body_w, body_h, 1.0f, 0.5f, 0.5f};
+        if (app->symptom_zoom_region >= 0 && app->symptom_zoom_region < REGION_COUNT) {
+            const BodyRegion *zr = &REGIONS[app->symptom_zoom_region];
+            m.scale = 2.2f;
+            m.cx = zr->x + zr->w * 0.5f;
+            m.cy = zr->y + zr->h * 0.5f;
+        }
+        float mx = ui->mx;
+        float my = ui->my - ui->origin_y;
+        int hover = -1;
+        if (app->symptom_zoom_region < 0 && mx >= m.bx && mx <= m.bx + m.bw &&
+            my >= m.by && my <= m.by + m.bh) {
+            int hit = region_at(&m, mx, my, app->symptom_body_view);
+            if (hit >= 0) hover = hit;
+        }
+
+        UiRect body_clip = ui_rect(0, body_y - 4, left_w, body_h + 8);
+        ui_push_clip(ui, body_clip);
+        draw_region_overlays(&m, app, hover);
+        draw_body(&m, app);
+        draw_region_overlays(&m, app, hover);
+        draw_markers(&m, app);
+        ui_pop_clip(ui);
+
+        /* Marker clicks focus their card. */
+        if (app->symptom_zoom_region < 0 && ui->mouse_pressed && mx >= m.bx &&
+            mx <= m.bx + m.bw && my >= m.by && my <= m.by + m.bh) {
+            for (int i = 0; i < app->symptom_card_count; i++) {
+                SymptomCard *c = &app->symptom_cards[i];
+                if (!card_is_region(c) || c->region < 0 ||
+                    REGIONS[c->region].view != app->symptom_body_view) continue;
+                float cx = bmx(&m, c->marker_x), cy = bmy(&m, c->marker_y);
+                if ((mx - cx) * (mx - cx) + (my - cy) * (my - cy) <= 144) {
+                    app->symptom_focus_card = i;
+                    ui_consume_click(ui);
+                    break;
+                }
+            }
+        }
+
+        if (app->symptom_zoom_region >= 0) {
+            UiRect close = ui_rect(split - 96, body_y + 8, 72, 28);
+            if (ui_button(ui, close, "Close", BUTTON_SECONDARY, true)) {
+                app->symptom_zoom_region = -1;
                 return;
             }
-        }
-    }
-
-    if (app->symptom_zoom_region >= 0) {
-        UiRect close = ui_rect(split - 96, body_y + 8, 72, 28);
-        if (ui_button(ui, close, "Close", BUTTON_SECONDARY, true)) {
-            app->symptom_zoom_region = -1;
-            return;
-        }
-        if (ui->mouse_pressed && mx >= m.bx && mx <= m.bx + m.bw && my >= m.by &&
-            my <= m.by + m.bh) {
-            float nx = m.cx + (mx - (m.bx + m.bw * 0.5f)) / (m.bw * m.scale);
-            float ny = m.cy + (my - (m.by + m.bh * 0.5f)) / (m.bh * m.scale);
-            if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
-                add_card(app, SYMPTOM_CARD_REGION, app->symptom_zoom_region, nx, ny, true);
+            if (ui->mouse_pressed && mx >= m.bx && mx <= m.bx + m.bw && my >= m.by &&
+                my <= m.by + m.bh) {
+                float nx = m.cx + (mx - (m.bx + m.bw * 0.5f)) / (m.bw * m.scale);
+                float ny = m.cy + (my - (m.by + m.bh * 0.5f)) / (m.bh * m.scale);
+                if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
+                    add_card(app, SYMPTOM_CARD_REGION, app->symptom_zoom_region, nx, ny, true);
+                    ui_consume_click(ui);
+                }
+            }
+        } else if (ui->mouse_pressed && mx >= m.bx && mx <= m.bx + m.bw && my >= m.by &&
+                   my <= m.by + m.bh) {
+            int hit = region_at(&m, mx, my, app->symptom_body_view);
+            if (hit >= 0) {
+                int64_t now = cs_epoch_ms();
+                if (app->symptom_pending_region == hit && now - app->symptom_pending_ms < 330) {
+                    app->symptom_zoom_region = hit;
+                    app->symptom_pending_region = -1;
+                } else {
+                    commit_pending(app);
+                    app->symptom_pending_region = hit;
+                    app->symptom_pending_ms = now;
+                    app->symptom_pending_x = (mx - m.bx) / m.bw;
+                    app->symptom_pending_y = (my - m.by) / m.bh;
+                }
                 ui_consume_click(ui);
             }
         }
-    } else if (ui->mouse_pressed && mx >= m.bx && mx <= m.bx + m.bw && my >= m.by &&
-               my <= m.by + m.bh) {
-        int hit = region_at(&m, mx, my, app->symptom_body_view);
-        if (hit >= 0) {
-            int64_t now = cs_epoch_ms();
-            if (app->symptom_pending_region == hit && now - app->symptom_pending_ms < 330) {
-                app->symptom_zoom_region = hit;
-                app->symptom_pending_region = -1;
-            } else {
-                commit_pending(app);
-                app->symptom_pending_region = hit;
-                app->symptom_pending_ms = now;
-                app->symptom_pending_x = (mx - m.bx) / m.bw;
-                app->symptom_pending_y = (my - m.by) / m.bh;
-            }
-            ui_consume_click(ui);
-        }
+
+        if (app->symptom_pending_region >= 0 && cs_epoch_ms() - app->symptom_pending_ms > 260)
+            commit_pending(app);
     }
 
-    if (app->symptom_pending_region >= 0 && cs_epoch_ms() - app->symptom_pending_ms > 260)
-        commit_pending(app);
-
-    }
     draw_card_list(app, split + 22, 18, w - split - 44, h - 36);
 
     bool downloading, failed, ready;
