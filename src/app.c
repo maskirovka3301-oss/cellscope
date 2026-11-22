@@ -3108,6 +3108,46 @@ static bool run_tar(const char *archive, const char *parent, const char *name, c
     return true;
 }
 
+static bool write_dataset_manifest(App *app, const char *dir, const char *name,
+                                   char *err, size_t err_cap)
+{
+    char path[CS_PATH_MAX];
+    cs_path_join(path, sizeof(path), dir, "manifest.json");
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        snprintf(err, err_cap, "Could not write %s", path);
+        return false;
+    }
+#if defined(_WIN32)
+    const char *platform = "windows";
+#elif defined(__APPLE__)
+    const char *platform = "macos";
+#else
+    const char *platform = "linux";
+#endif
+    SDL_LockMutex(app->mu);
+    int samples = app->cell_count;
+    int readings = app->meter_count;
+    SDL_UnlockMutex(app->mu);
+    char escaped[CS_PATH_MAX * 2];
+    cs_json_escape(name, escaped, sizeof(escaped));
+    fprintf(f,
+            "{\n"
+            "  \"schema\": \"cellscope-dataset/1\",\n"
+            "  \"dataset\": \"%s\",\n"
+            "  \"created_at_unix_ms\": %lld,\n"
+            "  \"platform\": \"%s\",\n"
+            "  \"git_commit\": \"%s\",\n"
+            "  \"cell_samples\": %d,\n"
+            "  \"readings\": %d\n"
+            "}\n",
+            escaped, (long long)cs_epoch_ms(), platform, CELLSCOPE_GIT_COMMIT,
+            samples, readings);
+    bool ok = fclose(f) == 0;
+    if (!ok) snprintf(err, err_cap, "Could not finish %s", path);
+    return ok;
+}
+
 void app_export_dataset(App *app)
 {
     char dir[CS_PATH_MAX] = {0};
@@ -3158,6 +3198,10 @@ void app_export_dataset(App *app)
     }
 
     char err[512] = {0};
+    if (!write_dataset_manifest(app, dir, name, err, sizeof(err))) {
+        app_notify(app, true, "Could not write the dataset manifest: %s", err);
+        return;
+    }
     int hashed = 0;
     if (!hash_dataset_files(dir, &hashed, err, sizeof(err))) {
         app_notify(app, true, "Could not checksum the dataset: %s", err);
