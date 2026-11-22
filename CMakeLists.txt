@@ -192,6 +192,10 @@ install(DIRECTORY third_party/minimind-v DESTINATION share/cellscope/third_party
 
 add_executable(gpu_smoke tools/gpu_smoke.c)
 target_link_libraries(gpu_smoke PRIVATE SDL3::SDL3)
+if(APPLE)
+  add_executable(gpu_ui_smoke tools/gpu_ui_smoke.c)
+  target_link_libraries(gpu_ui_smoke PRIVATE SDL3::SDL3)
+endif()
 if(SDL3_shadercross_FOUND)
   target_link_libraries(gpu_smoke PRIVATE SDL3_shadercross::SDL3_shadercross)
   target_compile_definitions(gpu_smoke PRIVATE CELLSCOPE_HAVE_SHADERCROSS=1)
