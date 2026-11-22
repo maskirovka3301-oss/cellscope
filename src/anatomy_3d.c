@@ -265,9 +265,17 @@ static bool load_model(Anatomy3D *a)
         int side = 0;
         for (int p = 0; p < prim_count; p++)
             if ((int)i >= first_vert[p] && (int)i < first_vert[p] + count_vert[p]) side = p;
-        verts[i].p[0] = (verts[i].p[0] - cx) * scale + (side ? 0.38f : -0.38f);
+        verts[i].p[0] = (verts[i].p[0] - cx) * scale;
         verts[i].p[1] = (verts[i].p[1] - cy) * scale;
         verts[i].p[2] = (verts[i].p[2] - cz) * scale;
+        if (side == 0) {
+            /* The female primitive is authored facing away from the male. */
+            verts[i].p[0] = -verts[i].p[0];
+            verts[i].p[2] = -verts[i].p[2];
+            verts[i].n[0] = -verts[i].n[0];
+            verts[i].n[2] = -verts[i].n[2];
+        }
+        verts[i].p[0] += side ? 0.38f : -0.38f;
     }
 
     SDL_GPUDevice *gpu = gpu_renderer_device(a->r);
@@ -389,7 +397,7 @@ Anatomy3D *anatomy_3d_create(App *app)
     a->r = app->r;
     a->yaw = 0;
     a->pitch = 0;
-    a->distance = 4.2f;
+    a->distance = 3.4f;
     a->selected = -1;
     if (!create_pipeline(a)) {
         a->failed = true;
@@ -433,15 +441,15 @@ void anatomy_3d_frame(App *app)
     if (!anatomy_3d_available(a) || app->active_tab != APP_TAB_SYMPTOM) return;
     Ui *ui = &app->ui;
     float left_w = (float)ui->win_w * 0.5f;
-    float body_y = 96.0f;
-    float body_h = (float)ui->view_h - body_y - 18.0f;
-    float body_w = body_h * 0.48f;
-    if (body_w > left_w - 100.0f) body_w = left_w - 100.0f;
-    float body_x = (left_w - body_w) * 0.5f;
+    float body_x = 0.0f;
+    float body_y = 0.0f;
+    float body_w = left_w;
+    float body_h = (float)ui->view_h;
     int tw = (int)body_w, th = (int)body_h;
     if (tw < 16 || th < 16) return;
     float mx = ui->mx, my = ui->my - ui->origin_y;
-    bool inside = mx >= body_x && mx <= body_x + body_w && my >= body_y &&
+    /* The viewport buttons occupy the top strip; do not orbit when using them. */
+    bool inside = mx >= body_x && mx <= body_x + body_w && my >= 56.0f &&
                   my <= body_y + body_h;
     if (inside && ui->mouse_pressed) {
         int side = mx < body_x + body_w * 0.5f ? 0 : 1;
