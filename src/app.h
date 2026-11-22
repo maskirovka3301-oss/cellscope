@@ -114,6 +114,13 @@ typedef struct {
     int accepted;
 } ReaderView;
 
+typedef struct {
+    int64_t ts_ms;
+    char status[24];
+    char archive[256];
+    char message[512];
+} UploadHistoryEntry;
+
 typedef struct App {
     /* options */
     bool train_mode;
@@ -243,6 +250,8 @@ typedef struct App {
     char last_export_archive[CS_PATH_MAX];
     char last_export_sig[CS_PATH_MAX];
     char upload_status[512];
+    UploadHistoryEntry upload_history[20];
+    int upload_history_count;
     int64_t session_started_ms;
     uint64_t session_cell_start;
     uint64_t session_meter_start;

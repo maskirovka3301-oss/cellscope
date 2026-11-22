@@ -1325,6 +1325,26 @@ static void draw_upload_modal(App *app, UiState *s)
         ui_text_wrapped_max(ui, card.x + 26, card.y + 174, card.w - 52, 9.4f,
                             UI_ACCENT, 1.45f, 3, status);
 
+    SDL_LockMutex(app->mu);
+    UploadHistoryEntry history[2];
+    int hist_count = app->upload_history_count;
+    int start = hist_count > 2 ? hist_count - 2 : 0;
+    int shown = hist_count - start;
+    for (int i = 0; i < shown; i++) history[i] = app->upload_history[start + i];
+    SDL_UnlockMutex(app->mu);
+    float hy = card.y + 230;
+    for (int i = shown - 1; i >= 0; i--) {
+        char row[768];
+        char when[32];
+        cs_format_time_ms(history[i].ts_ms, when, sizeof(when));
+        snprintf(row, sizeof(row), "%s  %-9s  %s  %s", when, history[i].status,
+                 history[i].archive, history[i].message);
+        ui_text_ellipsis(ui, FONT_MONO, card.x + 26, hy, 7.8f,
+                         strcmp(history[i].status, "accepted") == 0 ? UI_FAINT : UI_AMBER,
+                         card.w - 52, row);
+        hy += 16;
+    }
+
     float by = card.y + card.h - 52;
     UiRect close = ui_rect(card.x + card.w - 118, by, 92, 34);
     UiRect enroll = ui_rect(card.x + card.w - 342, by, 132, 34);
