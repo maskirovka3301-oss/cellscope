@@ -145,3 +145,9 @@ persistent atlas/eviction policy and replacing `ui.c`'s per-string textures.
 This branch is intentionally incomplete and is not merged. The application
 still uses SDL_Renderer; text, clipping, textures and the real screens must be
 ported before the renderer switch.
+
+### GPU UI texture path
+
+`feature/sdl-gpu-ui` now uses a texture-sampling pipeline and a 1x1 white base
+texture for solid fills. Glyph and shape quads will bind the persistent atlas
+through the same path.

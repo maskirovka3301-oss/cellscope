@@ -12,7 +12,7 @@ typedef struct {
     Uint8 r, g, b, a;
 } GpuUiRect;
 
-typedef struct { float x, y, r, g, b, a; } GpuUiVertex;
+typedef struct { float x, y, u, v, r, g, b, a; } GpuUiVertex;
 #define GPU_UI_CLIP_STACK 8
 #define GPU_UI_MAX_VERTS 8192
 
@@ -24,6 +24,8 @@ typedef struct GpuUi {
     SDL_GPUTransferBuffer *tbo;
     SDL_GPUCommandBuffer *cmd;
     SDL_GPUTexture *swap;
+    SDL_GPUTexture *white;
+    SDL_GPUSampler *sampler;
     GpuUiVertex *verts;
     int *clip_ids;
     int count;

@@ -29,6 +29,7 @@ static SDL_GPUShader *mk_shader(SDL_GPUDevice *gpu, SDL_GPUShaderStage stage, co
     i.entrypoint = "main0";
     i.format = SDL_GPU_SHADERFORMAT_MSL;
     i.stage = stage;
+    if (stage == SDL_GPU_SHADERSTAGE_FRAGMENT) i.num_samplers = 1;
     return SDL_CreateGPUShader(gpu, &i);
 #else
     (void)gpu; (void)stage; (void)code;
@@ -57,9 +58,10 @@ bool gpu_ui_init(GpuUi *ui, SDL_GPUDevice *gpu, SDL_Window *win, char *err, size
     vbd.slot = 0;
     vbd.pitch = sizeof(V);
     vbd.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-    SDL_GPUVertexAttribute attrs[2] = {
+    SDL_GPUVertexAttribute attrs[3] = {
         {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
-        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 2 * sizeof(float)},
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 2 * sizeof(float)},
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 4 * sizeof(float)},
     };
     SDL_GPUGraphicsPipelineCreateInfo ci = {0};
     ci.vertex_shader = vs;
@@ -67,7 +69,7 @@ bool gpu_ui_init(GpuUi *ui, SDL_GPUDevice *gpu, SDL_Window *win, char *err, size
     ci.vertex_input_state.vertex_buffer_descriptions = &vbd;
     ci.vertex_input_state.num_vertex_buffers = 1;
     ci.vertex_input_state.vertex_attributes = attrs;
-    ci.vertex_input_state.num_vertex_attributes = 2;
+    ci.vertex_input_state.num_vertex_attributes = 3;
     ci.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     ci.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
     ci.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
@@ -94,6 +96,41 @@ bool gpu_ui_init(GpuUi *ui, SDL_GPUDevice *gpu, SDL_Window *win, char *err, size
         snprintf(err, err_cap, "Could not create GPU UI buffer");
         return false;
     }
+    SDL_GPUTextureCreateInfo ti = {0};
+    ti.type = SDL_GPU_TEXTURETYPE_2D;
+    ti.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    ti.width = 1;
+    ti.height = 1;
+    ti.layer_count_or_depth = 1;
+    ti.num_levels = 1;
+    ui->white = SDL_CreateGPUTexture(gpu, &ti);
+    SDL_GPUSamplerCreateInfo si = {0};
+    si.min_filter = SDL_GPU_FILTER_NEAREST;
+    si.mag_filter = SDL_GPU_FILTER_NEAREST;
+    si.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    ui->sampler = SDL_CreateGPUSampler(gpu, &si);
+    if (!ui->white || !ui->sampler) {
+        snprintf(err, err_cap, "Could not create GPU UI texture");
+        return false;
+    }
+    SDL_GPUTransferBufferCreateInfo txi = {0};
+    txi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    txi.size = 4;
+    SDL_GPUTransferBuffer *txb = SDL_CreateGPUTransferBuffer(gpu, &txi);
+    void *px = SDL_MapGPUTransferBuffer(gpu, txb, false);
+    ((Uint8 *)px)[0] = 255; ((Uint8 *)px)[1] = 255;
+    ((Uint8 *)px)[2] = 255; ((Uint8 *)px)[3] = 255;
+    SDL_UnmapGPUTransferBuffer(gpu, txb);
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(gpu);
+    SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
+    SDL_GPUTextureTransferInfo src = {txb, 0, 1, 1};
+    SDL_GPUTextureRegion dst = {ui->white, 0, 0, 0, 1, 1, 1};
+    SDL_UploadToGPUTexture(copy, &src, &dst, false);
+    SDL_EndGPUCopyPass(copy);
+    SDL_SubmitGPUCommandBuffer(cmd);
+    SDL_ReleaseGPUTransferBuffer(gpu, txb);
     return true;
 }
 
@@ -104,6 +141,8 @@ void gpu_ui_shutdown(GpuUi *ui)
         if (ui->pipeline) SDL_ReleaseGPUGraphicsPipeline(ui->gpu, ui->pipeline);
         if (ui->vbo) SDL_ReleaseGPUBuffer(ui->gpu, ui->vbo);
         if (ui->tbo) SDL_ReleaseGPUTransferBuffer(ui->gpu, ui->tbo);
+        if (ui->white) SDL_ReleaseGPUTexture(ui->gpu, ui->white);
+        if (ui->sampler) SDL_ReleaseGPUSampler(ui->gpu, ui->sampler);
     }
     free(ui->verts);
     free(ui->clip_ids);
@@ -131,8 +170,8 @@ void gpu_ui_fill_rect(GpuUi *ui, GpuUiRect r)
     float b = 1.0f - ((r.y + r.h) / (float)ui->win_h) * 2.0f;
     float cr = r.r / 255.0f, cg = r.g / 255.0f, cb = r.b / 255.0f, ca = r.a / 255.0f;
     V q[6] = {
-        {l, t, cr, cg, cb, ca}, {rt, t, cr, cg, cb, ca}, {rt, b, cr, cg, cb, ca},
-        {l, t, cr, cg, cb, ca}, {rt, b, cr, cg, cb, ca}, {l, b, cr, cg, cb, ca},
+        {l, t, 0, 0, cr, cg, cb, ca}, {rt, t, 1, 0, cr, cg, cb, ca}, {rt, b, 1, 1, cr, cg, cb, ca},
+        {l, t, 0, 0, cr, cg, cb, ca}, {rt, b, 1, 1, cr, cg, cb, ca}, {l, b, 0, 1, cr, cg, cb, ca},
     };
     memcpy(&ui->verts[ui->count], q, sizeof(q));
     int id = ui->clip_depth > 0 ? ui->clip_depth - 1 : -1;
@@ -179,6 +218,8 @@ bool gpu_ui_end(GpuUi *ui)
     SDL_BindGPUGraphicsPipeline(pass, ui->pipeline);
     SDL_GPUBufferBinding binding = {ui->vbo, 0};
     SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+    SDL_GPUTextureSamplerBinding ts = {ui->white, ui->sampler};
+    SDL_BindGPUFragmentSamplers(pass, 0, &ts, 1);
     int start = 0;
     while (start < ui->count) {
         int id = ui->clip_ids[start];
