@@ -107,3 +107,17 @@ texture/text primitives on top of this pipeline.
 
 The next batcher extension is a texture atlas and font glyph quads. After that,
 the real `ui.c` primitives can be mapped onto this backend.
+
+## Atlas milestone
+
+`tools/gpu_atlas_smoke.c` validates the atlas path:
+
+- creates a GPU texture from CPU RGBA pixels;
+- uploads it through a transfer buffer and copy pass;
+- creates a sampler;
+- binds the texture/sampler to a textured-quad pipeline;
+- draws a UV-mapped quad.
+
+This is the substrate for shape masks and FreeType glyphs. The next step is a
+single persistent atlas with eviction, then mapping the real `ui.c` primitives
+onto it.
