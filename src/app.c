@@ -1601,10 +1601,10 @@ static int cloud_status_thread(void *arg)
     return 0;
 }
 
-bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t err_cap)
+bool app_init(App *app, SDL_Window *win, GpuRenderer *r, char *err, size_t err_cap)
 {
     app->win = win;
-    app->ren = ren;
+    app->r = r;
     app->started_ms = cs_now_ms();
     app->paused = !app->autoplay;
     app->symptom_zoom_region = -1;
@@ -1659,12 +1659,12 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
 
     float scale = SDL_GetWindowDisplayScale(win);
     if (scale <= 0) scale = 1.0f;
-    if (!ui_init(&app->ui, ren, app->asset_dir, scale, err, err_cap)) return false;
+    if (!ui_init(&app->ui, r, app->asset_dir, scale, err, err_cap)) return false;
 
     if (!app->demo && !app->image_mode && !app->no_camera) {
         if (!app->paused) {
             char cam_err[512];
-            if (camera_init(&app->cam, ren, app->camera_index, cam_err,
+            if (camera_init(&app->cam, r, app->camera_index, cam_err,
                             sizeof(cam_err))) {
                 app->camera_ok = true;
             } else {
@@ -1686,11 +1686,19 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
             return false;
         }
         app->img_rgb = pixels;
-        app->img_tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB24,
-                                         SDL_TEXTUREACCESS_STATIC, app->img_w, app->img_h);
+        app->img_tex = gpu_texture_create(r, app->img_w, app->img_h);
         if (app->img_tex) {
-            SDL_UpdateTexture(app->img_tex, NULL, app->img_rgb, app->img_w * 3);
-            SDL_SetTextureScaleMode(app->img_tex, SDL_SCALEMODE_LINEAR);
+            unsigned char *rgba = malloc((size_t)app->img_w * app->img_h * 4);
+            if (rgba) {
+                for (int i = 0; i < app->img_w * app->img_h; i++) {
+                    rgba[i * 4 + 0] = pixels[i * 3 + 0];
+                    rgba[i * 4 + 1] = pixels[i * 3 + 1];
+                    rgba[i * 4 + 2] = pixels[i * 3 + 2];
+                    rgba[i * 4 + 3] = 255;
+                }
+                gpu_texture_update(app->img_tex, rgba, app->img_w * 4);
+                free(rgba);
+            }
         }
     }
 
@@ -1833,8 +1841,8 @@ void app_shutdown(App *app)
         SDL_UnlockMutex(app->mu);
     }
     camera_close(&app->cam);
-    if (app->img_tex) SDL_DestroyTexture(app->img_tex);
-    if (app->preview_tex) SDL_DestroyTexture(app->preview_tex);
+    if (app->img_tex) gpu_texture_destroy(app->r, app->img_tex);
+    if (app->preview_tex) gpu_texture_destroy(app->r, app->preview_tex);
     ui_shutdown(&app->ui);
     for (int i = 0; i < BURST_MAX; i++) free(app->burst[i].rgb);
     free(app->latest_rgb);
@@ -1915,7 +1923,7 @@ bool app_retry_camera(App *app, bool notify)
     camera_close(&app->cam);
     app->camera_error[0] = '\0';
     char err[512] = {0};
-    bool ok = camera_init(&app->cam, app->ren, app->camera_index, err, sizeof(err));
+    bool ok = camera_init(&app->cam, app->r, app->camera_index, err, sizeof(err));
     app->camera_ok = ok;
     if (!ok) cs_strlcpy(app->camera_error, err, sizeof(app->camera_error));
     if (notify || ok) app_log(app, "camera retry: %s%s", ok ? "opened" : "failed",
@@ -2054,12 +2062,20 @@ void app_update(App *app)
             int w = 0, h = 0, n = 0;
             unsigned char *pixels = stbi_load(path, &w, &h, &n, 3);
             if (pixels) {
-                if (app->preview_tex) SDL_DestroyTexture(app->preview_tex);
-                app->preview_tex = SDL_CreateTexture(app->ren, SDL_PIXELFORMAT_RGB24,
-                                                     SDL_TEXTUREACCESS_STATIC, w, h);
+                if (app->preview_tex) gpu_texture_destroy(app->r, app->preview_tex);
+                app->preview_tex = gpu_texture_create(app->r, w, h);
                 if (app->preview_tex) {
-                    SDL_UpdateTexture(app->preview_tex, NULL, pixels, w * 3);
-                    SDL_SetTextureScaleMode(app->preview_tex, SDL_SCALEMODE_LINEAR);
+                    unsigned char *rgba = malloc((size_t)w * h * 4);
+                    if (rgba) {
+                        for (int i = 0; i < w * h; i++) {
+                            rgba[i * 4 + 0] = pixels[i * 3 + 0];
+                            rgba[i * 4 + 1] = pixels[i * 3 + 1];
+                            rgba[i * 4 + 2] = pixels[i * 3 + 2];
+                            rgba[i * 4 + 3] = 255;
+                        }
+                        gpu_texture_update(app->preview_tex, rgba, w * 4);
+                        free(rgba);
+                    }
                 }
                 cs_strlcpy(app->preview_path, path, sizeof(app->preview_path));
                 stbi_image_free(pixels);
@@ -3484,17 +3500,11 @@ void app_export_dataset(App *app)
 
 void app_save_window_png(App *app, const char *path)
 {
-    SDL_Surface *surf = SDL_RenderReadPixels(app->ren, NULL);
-    if (!surf) {
+    if (!gpu_renderer_screenshot(app->r, path)) {
         app_log(app, "screenshot failed: %s", SDL_GetError());
-        return;
-    }
-    if (!SDL_SavePNG(surf, path)) {
-        app_log(app, "screenshot save failed: %s", SDL_GetError());
     } else {
         app_log(app, "screenshot saved: %s", path);
     }
-    SDL_DestroySurface(surf);
 }
 
 static void settings_field_append(App *app, const char *text)

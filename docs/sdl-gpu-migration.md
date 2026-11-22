@@ -1,8 +1,7 @@
 # SDL_GPU UI migration
 
-The app currently uses `SDL_Renderer` for all 2D UI drawing. The anatomy viewport
-needs a real 3D pipeline, and the OpenGL/SDL_Renderer hybrid is not reliable.
-The agreed architecture is a full migration to `SDL_GPU`.
+The app now presents through `SDL_GPU`; no `SDL_Renderer` or `SDL_Texture`
+remains. The anatomy viewport will use the same GPU backend.
 
 ## Backends
 
@@ -76,7 +75,7 @@ Shader formats: 0x30
 ```
 
 The smoke target is built as `gpu_smoke` and does not replace the existing
-SDL_Renderer UI yet.
+SDL_GPU UI.
 
 SDL_shadercross discovery is wired as an optional CMake package. The next
 foundation step is to build/install SDL_shadercross and add the first real UI
@@ -133,3 +132,18 @@ onto it.
 
 This is the text layer the real UI port will use. Remaining steps are the
 persistent atlas/eviction policy and replacing `ui.c`'s per-string textures.
+
+## UI port
+
+The complete UI is ported to `src/gpu_renderer.c`:
+
+- one 4096x4096 RGBA atlas for text and shape tiles;
+- dynamic batched vertex uploads;
+- clip-aware scissor ranges;
+- 1x1 white texture for solid fills;
+- camera/image GPU textures;
+- GPU swapchain screenshot readback, normalized to 1440x900;
+- GLSL -> SPIR-V (Metal/Vulkan) and SPIR-V -> MSL (Metal) shader artifacts.
+
+No SDL_Renderer calls remain in `src/`.
+

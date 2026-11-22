@@ -7,10 +7,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "gpu_renderer.h"
+
 typedef struct {
-    SDL_Renderer *ren;
+    GpuRenderer *r;
     SDL_Camera *cam;
-    SDL_Texture *tex;
+    GpuTexture *tex;
     SDL_CameraID ids[8];
     char names[8][128];
     int count;
@@ -30,7 +32,7 @@ typedef struct {
     int64_t last_capture_ms;
 } Camera;
 
-bool camera_init(Camera *cam, SDL_Renderer *ren, int index, char *err, size_t err_cap);
+bool camera_init(Camera *cam, GpuRenderer *r, int index, char *err, size_t err_cap);
 void camera_close(Camera *cam);
 void camera_update(Camera *cam);
 bool camera_switch(Camera *cam);

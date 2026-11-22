@@ -19,8 +19,8 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/symptom-body-map` | Temporary 2D front/back fallback until 3D is ready; retire it after 3D works. | `e4ec3de` |
 | `feature/anatomy-assets` | Download versioned 3D assets from a separate B2 bucket into the local cache, with SHA-512 verification, progress UI and offline fallback. | `734ab32` |
 | `feature/anatomy-b2-presign` | Add a Worker route that signs short-lived GETs for the private anatomy B2 bucket so the read-only key never enters the app. | |
-| `feature/sdl-gpu-foundation` | Replace SDL_Renderer with an SDL_GPU device/swapchain, shader pipeline, resize and screenshot foundation. | |
-| `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | |
+| `feature/sdl-gpu-foundation` | Replace SDL_Renderer with an SDL_GPU device/swapchain, shader pipeline, resize and screenshot foundation. | `49697a9` |
+| `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | `3df4c0a` |
 | `feature/sdl-gpu-3d` | Add the SDL_GPU 3D pipeline, textured male/female models, orbit/zoom and adaptive LOD. | |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | |
 | `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | |
@@ -76,7 +76,7 @@ The existing CellScope window remains intact inside the first tab.
 
 ### 3D rendering and assets
 
-- Renderer: SDL_GPU, using Metal on macOS, Vulkan on Linux and Vulkan/D3D12 on Windows.
+- Renderer: SDL_GPU, using Metal on macOS and Vulkan on Windows/Linux.
 - Asset source: separate B2 bucket, not Git or the application release archive.
 - Download automatically when Symptom Report opens, with a progress bar.
 - Cache at `~/.cellscope/assets/anatomy/<version>/`.
@@ -170,8 +170,8 @@ subsections with their selected definition and control values.
 
 The OpenGL hybrid is rejected. The whole rendering layer moves to SDL_GPU:
 
-1. **Foundation** — create the GPU device and swapchain; choose Metal, Vulkan or
-   D3D12; frame command buffers; shader loading; resize; screenshot readback.
+1. **Foundation** — create the GPU device and swapchain; choose Metal or Vulkan;
+   frame command buffers; shader loading; resize; screenshot readback.
 2. **UI backend** — port every UI primitive currently expressed through
    `SDL_Renderer`:
    - solid/outlined rectangles and lines
@@ -186,9 +186,8 @@ The OpenGL hybrid is rejected. The whole rendering layer moves to SDL_GPU:
 4. **Input and state** — keep the existing immediate-mode UI behavior and
    screenshot/UI regression harness.
 
-Shader formats must be delivered for all backends, preferably through
-SDL_shadercross or precompiled SPIR-V/DXIL/MSL per platform. The migration must
-not leave SDL_Renderer as a hidden second renderer.
+Shaders are compiled from GLSL to SPIR-V; SDL_shadercross generates MSL for
+Metal. The migration does not leave SDL_Renderer as a hidden second renderer.
 
 ## Acceptance criteria
 
@@ -206,7 +205,7 @@ not leave SDL_Renderer as a hidden second renderer.
 - Fuzzy symptom search loads the correct controls and supports multiple subsections.
 - One report per dataset round-trips through JSON and is included in archive/manifest.
 - A report-only dataset can be exported and uploaded.
-- The app presents through SDL_GPU on Metal/Vulkan/D3D12; no SDL_Renderer remains.
+- The app presents through SDL_GPU on Metal/Vulkan; no SDL_Renderer remains.
 - Existing UI states and interactions have visual parity after migration.
 - The 3D model loads from B2/cache with progress, checksum verification and retry.
 - Both male and female models appear frontally side by side; the user can choose one.

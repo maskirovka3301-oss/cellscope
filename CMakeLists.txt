@@ -83,6 +83,7 @@ set(CELLSCOPE_SOURCES
   src/anatomy_assets.c
   src/train.c
   src/ui.c
+  src/gpu_renderer.c
   src/fonts.c
   src/proc.c
   src/runtime.c
@@ -134,7 +135,6 @@ target_compile_definitions(cellscope PRIVATE
   $<$<PLATFORM_ID:Windows>:_CRT_SECURE_NO_WARNINGS>
 )
 if(APPLE)
-  target_compile_definitions(cellscope PRIVATE GL_SILENCE_DEPRECATION)
   set_target_properties(cellscope PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info.plist.in"

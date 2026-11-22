@@ -442,7 +442,7 @@ static void draw_camera_panel(App *app, UiState *s, UiRect r)
     ui_round_rect(ui, p, 10, UI_COLOR(5, 8, 11, 255));
     ui_round_rect(ui, ui_inset(p, 1), 9, UI_COLOR(8, 12, 16, 255));
 
-    SDL_Texture *tex = NULL;
+    GpuTexture *tex = NULL;
     int tw = 0, th = 0;
     if (app->demo) {
         draw_demo_feed(app, p);
@@ -463,8 +463,8 @@ static void draw_camera_panel(App *app, UiState *s, UiRect r)
             fit_h = p.h;
             fit_w = fit_h * aspect;
         }
-        SDL_FRect dst = {p.x + (p.w - fit_w) / 2, p.y + (p.h - fit_h) / 2, fit_w, fit_h};
-        SDL_RenderTexture(ui->ren, tex, NULL, &dst);
+        GpuRect dst = {p.x + (p.w - fit_w) / 2, p.y + (p.h - fit_h) / 2, fit_w, fit_h};
+        gpu_renderer_texture_rect(ui->r, tex, dst, UI_WHITE);
     } else if (!app->demo) {
         bool pending = app->cam.permission_pending;
         bool denied = app->cam.permission_denied;

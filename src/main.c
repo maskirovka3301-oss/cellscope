@@ -123,32 +123,26 @@ int main(int argc, char **argv)
     }
     SDL_SetWindowMinimumSize(win, 1180, 760);
 
-    SDL_Renderer *ren = SDL_CreateRenderer(win, NULL);
-    if (!ren) {
-        fprintf(stderr, "Renderer creation failed: %s\n", SDL_GetError());
+    GpuRenderer *gpu = gpu_renderer_create(win, err, sizeof(err));
+    if (!gpu) {
+        fprintf(stderr, "Renderer creation failed: %s\n", err);
         SDL_DestroyWindow(win);
         SDL_Quit();
         free(app);
         return 1;
     }
-    SDL_SetRenderVSync(ren, 1);
 
-    if (!app_init(app, win, ren, err, sizeof(err))) {
+    if (!app_init(app, win, gpu, err, sizeof(err))) {
         fprintf(stderr, "CellScope init failed: %s\n", err);
         app_shutdown(app);
-        SDL_DestroyRenderer(ren);
+        gpu_renderer_destroy(gpu);
         SDL_DestroyWindow(win);
         SDL_Quit();
         free(app);
         return 1;
     }
 
-    /* The UI is designed at 1440x900. Fixed logical presentation keeps text
-     * and controls readable when the window opens fullscreen on a HiDPI or
-     * 4K display; the renderer letterboxes rather than stretching. */
     int logical_w = 1440, logical_h = 900;
-    SDL_SetRenderLogicalPresentation(ren, logical_w, logical_h,
-                                     SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
     bool running = true;
     bool screenshot_taken = false;
@@ -160,7 +154,23 @@ int main(int argc, char **argv)
                 break;
             }
             SDL_Event converted = e;
-            SDL_ConvertEventToRenderCoordinates(ren, &converted);
+            int ww = logical_w, wh = logical_h;
+            SDL_GetWindowSize(win, &ww, &wh);
+            if (ww > 0 && wh > 0) {
+                float sx = (float)logical_w / (float)ww;
+                float sy = (float)logical_h / (float)wh;
+                if (converted.type == SDL_EVENT_MOUSE_MOTION) {
+                    converted.motion.x *= sx;
+                    converted.motion.y *= sy;
+                } else if (converted.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                           converted.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+                    converted.button.x *= sx;
+                    converted.button.y *= sy;
+                } else if (converted.type == SDL_EVENT_MOUSE_WHEEL) {
+                    converted.wheel.mouse_x *= sx;
+                    converted.wheel.mouse_y *= sy;
+                }
+            }
             app_handle_event(app, &converted);
         }
         if (!running) break;
@@ -183,14 +193,13 @@ int main(int argc, char **argv)
         }
         if (app->run_ms > 0 && elapsed >= app->run_ms) running = false;
 
-        SDL_RenderPresent(ren);
         ui_end_frame(&app->ui);
 
         if (running) SDL_Delay(8);
     }
 
     app_shutdown(app);
-    SDL_DestroyRenderer(ren);
+    gpu_renderer_destroy(gpu);
     SDL_DestroyWindow(win);
     SDL_Quit();
     curl_global_cleanup();

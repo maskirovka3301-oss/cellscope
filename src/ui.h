@@ -8,14 +8,13 @@
 #include <stdint.h>
 
 #include "fonts.h"
+#include "gpu_renderer.h"
 
 typedef struct {
     float x, y, w, h;
 } UiRect;
 
-typedef struct {
-    Uint8 r, g, b, a;
-} UiColor;
+typedef GpuColor UiColor;
 
 static inline UiRect ui_rect(float x, float y, float w, float h)
 {
@@ -69,19 +68,21 @@ typedef struct {
     uint64_t hash;
     int font;
     int px;
-    SDL_Texture *tex;
+    int ax, ay;
     int w, h;
     uint64_t used;
+    bool valid;
 } UiTextEntry;
 
 typedef struct {
     int w, h, radius;
-    SDL_Texture *tex;
+    int ax, ay;
     uint64_t used;
+    bool valid;
 } UiShapeEntry;
 
 typedef struct {
-    SDL_Renderer *ren;
+    GpuRenderer *r;
     Fonts fonts;
     float scale;
     int win_w, win_h;
@@ -103,11 +104,11 @@ typedef struct {
 
     SDL_Rect clip_stack[UI_CLIP_STACK];
     int clip_depth;
-    SDL_Texture *bg_gradient;
+    GpuTexture *bg_gradient;
     char asset_dir[CS_PATH_MAX];
 } Ui;
 
-bool ui_init(Ui *ui, SDL_Renderer *ren, const char *asset_dir, float scale, char *err,
+bool ui_init(Ui *ui, GpuRenderer *r, const char *asset_dir, float scale, char *err,
              size_t err_cap);
 void ui_shutdown(Ui *ui);
 void ui_handle_event(Ui *ui, const SDL_Event *e);
