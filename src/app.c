@@ -40,6 +40,7 @@ static int SDLCALL cellscope_bootstrap_thread(void *data);
 static void session_write_locked(App *app);
 static bool session_begin_locked(App *app);
 static void session_end_locked(App *app);
+static bool session_rotate_locked(App *app);
 
 static void cell_push_locked(App *app, const CellSample *s)
 {
@@ -658,8 +659,11 @@ void app_upload_dataset(App *app)
         cs_strlcpy(job->archive, archive, sizeof(job->archive));
         cs_strlcpy(job->sig, sig, sizeof(job->sig));
         save_upload_queue_locked(app);
+        bool rotated = session_rotate_locked(app);
         snprintf(app->upload_status, sizeof(app->upload_status),
-                 "Queued %s for upload.", file_basename(archive));
+                 rotated ? "Queued %s for upload. New dataset started."
+                         : "Queued %s for upload, but a new dataset could not be started.",
+                 file_basename(archive));
     } else {
         cs_strlcpy(app->upload_status, "Upload queue is full.", sizeof(app->upload_status));
     }
@@ -1724,7 +1728,7 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
         SDL_UnlockMutex(app->mu);
     }
     if (app->demo && !app->paused) app_seed_demo(app);
-    if (!app->paused && !app->readme_fixture) {
+    if (!app->train_mode && !app->setup_runtime_mode && !app->export_json_path[0]) {
         SDL_LockMutex(app->mu);
         bool session_ok = session_begin_locked(app);
         SDL_UnlockMutex(app->mu);
@@ -2884,7 +2888,7 @@ void app_toggle_pause(App *app)
         app->reader.live_valid = false;
         app->reader.live_raw[0] = '\0';
         visibility_commit_locked(app);
-        session_end_locked(app);
+        session_write_locked(app);
         app->reader.busy = false;
         cs_strlcpy(app->reader.status, "Paused — press play to resume",
                    sizeof(app->reader.status));
@@ -2912,7 +2916,7 @@ void app_toggle_pause(App *app)
     }
     app_log(app, pause_now ? "paused" : "resumed");
     if (pause_now) {
-        app_notify(app, false, "Paused webcam and ADB. Dataset saved to %s", session);
+        app_notify(app, false, "Paused webcam and ADB. RF writes stopped; dataset remains open.");
     } else if (!session_ok) {
         app_notify(app, true, "Resumed, but could not create a dataset folder.");
     } else {
@@ -3113,6 +3117,12 @@ static void session_end_locked(App *app)
     if (!app->session_active) return;
     session_write_locked(app);
     app->session_active = false;
+}
+
+static bool session_rotate_locked(App *app)
+{
+    session_end_locked(app);
+    return session_begin_locked(app);
 }
 
 static void app_export_json_to(App *app, const char *path)
