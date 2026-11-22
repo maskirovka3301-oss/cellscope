@@ -1195,6 +1195,8 @@ AppArgsResult app_parse_args(App *app, int argc, char **argv, char *err, size_t 
                                      : strcmp(mode, "upload") == 0 ? 7
                                      : strcmp(mode, "model") == 0 ? 8
                                      : strcmp(mode, "symptom") == 0 ? 9
+                                     : strcmp(mode, "symptom-card") == 0 ? 10
+                                     : strcmp(mode, "symptom-zoom") == 0 ? 11
                                                                  : 1;
         } else if (strcmp(a, "--autoplay") == 0) {
             app->autoplay = true;
@@ -1541,7 +1543,23 @@ static void readme_fixture_seed(App *app)
         app->remove_meter_open = true;
         app->remove_meter_index = app->meter_count - 1;
     }
-    if (app->readme_fixture_mode == 9) app->active_tab = APP_TAB_SYMPTOM;
+    if (app->readme_fixture_mode == 9 || app->readme_fixture_mode == 10 ||
+        app->readme_fixture_mode == 11)
+        app->active_tab = APP_TAB_SYMPTOM;
+    if (app->readme_fixture_mode == 10) {
+        app->symptom_body_view = 0;
+        app->symptom_card_count = 1;
+        app->symptom_focus_card = 0;
+        SymptomCard *c = &app->symptom_cards[0];
+        c->kind = SYMPTOM_CARD_REGION;
+        c->region = 11; /* front left knee */
+        c->point_x = 0.42f;
+        c->point_y = 0.67f;
+        c->marker_x = 0.46f;
+        c->marker_y = 0.64f;
+        c->has_point = true;
+    }
+    if (app->readme_fixture_mode == 11) app->symptom_zoom_region = 11;
     SDL_UnlockMutex(app->mu);
 }
 
@@ -1586,6 +1604,9 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
     app->ren = ren;
     app->started_ms = cs_now_ms();
     app->paused = !app->autoplay;
+    app->symptom_zoom_region = -1;
+    app->symptom_pending_region = -1;
+    app->symptom_focus_card = -1;
     if (getenv("CELLSCOPE_START_PAUSED")) app->paused = true;
     if (getenv("CELLSCOPE_AUTOPLAY")) app->paused = false;
     char settings_err[512] = {0};
