@@ -19,7 +19,9 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/symptom-body-map` | Temporary 2D front/back fallback until 3D is ready; retire it after 3D works. | `e4ec3de` |
 | `feature/anatomy-assets` | Download versioned 3D assets from a separate B2 bucket into the local cache, with SHA-512 verification, progress UI and offline fallback. | `734ab32` |
 | `feature/anatomy-b2-presign` | Add a Worker route that signs short-lived GETs for the private anatomy B2 bucket so the read-only key never enters the app. | |
-| `feature/anatomy-renderer` | OpenGL 2.1 3D viewport with orbit/zoom, textured model, male/female side-by-side frontal display, and adaptive LOD selection. | |
+| `feature/sdl-gpu-foundation` | Replace SDL_Renderer with an SDL_GPU device/swapchain, shader pipeline, resize and screenshot foundation. | |
+| `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | |
+| `feature/sdl-gpu-3d` | Add the SDL_GPU 3D pipeline, textured male/female models, orbit/zoom and adaptive LOD. | |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | |
 | `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | |
 | `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, focus-by-circle and card removal. | |
@@ -74,7 +76,7 @@ The existing CellScope window remains intact inside the first tab.
 
 ### 3D rendering and assets
 
-- Renderer: OpenGL 2.1 compatibility, proven through the SDL_Renderer/OpenGL spike.
+- Renderer: SDL_GPU, using Metal on macOS, Vulkan on Linux and Vulkan/D3D12 on Windows.
 - Asset source: separate B2 bucket, not Git or the application release archive.
 - Download automatically when Symptom Report opens, with a progress bar.
 - Cache at `~/.cellscope/assets/anatomy/<version>/`.
@@ -164,6 +166,30 @@ Each card records its kind (`region`, `whole_body`, `non_physical`), selected
 regions with view and point, displayed marker, minimized state, and symptom
 subsections with their selected definition and control values.
 
+## SDL_GPU migration
+
+The OpenGL hybrid is rejected. The whole rendering layer moves to SDL_GPU:
+
+1. **Foundation** — create the GPU device and swapchain; choose Metal, Vulkan or
+   D3D12; frame command buffers; shader loading; resize; screenshot readback.
+2. **UI backend** — port every UI primitive currently expressed through
+   `SDL_Renderer`:
+   - solid/outlined rectangles and lines
+   - rounded shapes and circles
+   - cached text textures
+   - clipping/scissor
+   - color modulation and alpha blending
+   - image textures
+   - batching into dynamic vertex/index buffers
+3. **3D backend** — model pipeline with depth, 4K textures, lighting and
+   male/female side-by-side rendering.
+4. **Input and state** — keep the existing immediate-mode UI behavior and
+   screenshot/UI regression harness.
+
+Shader formats must be delivered for all backends, preferably through
+SDL_shadercross or precompiled SPIR-V/DXIL/MSL per platform. The migration must
+not leave SDL_Renderer as a hidden second renderer.
+
 ## Acceptance criteria
 
 - The complete existing RF window is inside RF Check; only the tab/action bar is outside.
@@ -180,6 +206,8 @@ subsections with their selected definition and control values.
 - Fuzzy symptom search loads the correct controls and supports multiple subsections.
 - One report per dataset round-trips through JSON and is included in archive/manifest.
 - A report-only dataset can be exported and uploaded.
+- The app presents through SDL_GPU on Metal/Vulkan/D3D12; no SDL_Renderer remains.
+- Existing UI states and interactions have visual parity after migration.
 - The 3D model loads from B2/cache with progress, checksum verification and retry.
 - Both male and female models appear frontally side by side; the user can choose one.
 - The chosen model rotates and zooms in 3D.
@@ -196,7 +224,6 @@ subsections with their selected definition and control values.
 - Remote report editing or separate report upload.
 - Changes to the RF measurement pipeline.
 - Shipping the purchased model files in Git or release archives.
-- Vulkan/Metal/D3D12 rendering or an SDL_GPU UI migration in this release.
 
 ## Release checklist
 
