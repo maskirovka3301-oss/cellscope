@@ -121,3 +121,15 @@ the real `ui.c` primitives can be mapped onto this backend.
 This is the substrate for shape masks and FreeType glyphs. The next step is a
 single persistent atlas with eviction, then mapping the real `ui.c` primitives
 onto it.
+
+## Glyph atlas milestone
+
+`tools/gpu_text_smoke.c` adds a single R8 glyph atlas:
+
+- rasterizes the UI font through FreeType into one 1024x1024 atlas;
+- uploads the atlas through a GPU transfer buffer;
+- draws glyph quads from the atlas through the textured pipeline;
+- uses the atlas alpha with per-vertex color.
+
+This is the text layer the real UI port will use. Remaining steps are the
+persistent atlas/eviction policy and replacing `ui.c`'s per-string textures.
