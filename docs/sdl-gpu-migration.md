@@ -95,3 +95,15 @@ quad pipeline; until then the app continues to use its current renderer.
 It is a standalone validation target (`gpu_ui_smoke`) and does not replace the
 application UI yet. The next step is to build the general UI batcher and
 texture/text primitives on top of this pipeline.
+
+## UI batcher milestone
+
+`tools/gpu_ui_batch.c` adds the first reusable batcher shape:
+
+- dynamic vertex batch for colored rectangles;
+- one transfer-buffer upload per frame;
+- one pipeline bind and one draw call for the batch;
+- mock frame with tab bar, left/right panels and button rectangles.
+
+The next batcher extension is a texture atlas and font glyph quads. After that,
+the real `ui.c` primitives can be mapped onto this backend.
