@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
       - "release/**"
   pull_request:
     branches:
@@ -141,7 +142,7 @@ jobs:
 
   sign-windows:
     name: Sign Windows binaries
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/'))
     needs: build
     runs-on: windows-2022
     environment: windows-signing
