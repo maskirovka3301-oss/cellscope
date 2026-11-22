@@ -1,6 +1,7 @@
-# CellScope Global Privacy Contract
+CELLSCOPE GLOBAL PRIVACY CONTRACT
+=================================
 
-Version: v0.1.1  
+Version: v0.1.1
 Effective date: 2026-11-22
 
 This contract describes the privacy commitments that apply to CellScope on
@@ -8,25 +9,27 @@ macOS, Windows and Linux, and to any CellScope upload backend operated for the
 project. It is based on the behavior implemented in the application source and
 the Cloudflare Worker, not on optional deployment documentation.
 
-## 1. Core commitments
+1. CORE COMMITMENTS
+===================
 
 CellScope is designed around five commitments:
 
-1. **Local first.** Cell observations, camera frames, frequency readings,
+1. Local first. Cell observations, camera frames, frequency readings,
    screenshots and training data are processed on the user's device by default.
-2. **No tracking.** The application contains no analytics, telemetry, advertising
+2. No tracking. The application contains no analytics, telemetry, advertising
    or behavioural profiling, and does not sell personal data.
-3. **Uploads are explicit.** A dataset is uploaded only after the user configures
+3. Uploads are explicit. A dataset is uploaded only after the user configures
    a backend, enrolls the device and presses Upload.
-4. **Minimum necessary data.** Only the data needed for the research dataset and
+4. Minimum necessary data. Only the data needed for the research dataset and
    for upload integrity is transmitted.
-5. **User control.** Local data can be inspected, exported and deleted by the
+5. User control. Local data can be inspected, exported and deleted by the
    user. The device identity can be revoked.
 
 These commitments do not make uploaded data anonymous. Users must understand
 what an uploaded dataset contains before choosing to upload it.
 
-## 2. Data processed on the device
+2. DATA PROCESSED ON THE DEVICE
+===============================
 
 CellScope may create and retain the following locally:
 
@@ -37,7 +40,7 @@ CellScope may create and retain the following locally:
 - webcam screenshots of the frequency counter;
 - observed Wi-Fi SSIDs, pseudonymized with a locally stored random salt, together
   with RSSI values;
-- dataset JSON, `manifest.json` and SHA-512 `.sig` sidecars;
+- dataset JSON, manifest.json and SHA-512 .sig sidecars;
 - dataset archives and upload queue/history files;
 - application settings, including the optional upload API URL and email address;
 - the Ed25519 device private key, stored in macOS Keychain, Windows DPAPI, or a
@@ -48,18 +51,19 @@ The Wi-Fi transformation is pseudonymization, not a guarantee of anonymity.
 Determined guessing against a known salt or a small set of likely SSIDs may be
 possible. CellScope does not transmit the Wi-Fi salt.
 
-## 3. Local processing and network use
+3. LOCAL PROCESSING AND NETWORK USE
+===================================
 
 CellScope uses:
 
-- `adb` on the local machine to read the connected Android device;
+- adb on the local machine to read the connected Android device;
 - the local webcam through the operating system camera API;
 - a local HTTP bridge on loopback for local VLM inference;
 - libcurl for local model servers and, when the user configures it, the
   Cloudflare upload API and Backblaze B2.
 
 The application does not send camera frames, readings or cell observations to a
-cloud inference service. A user-supplied `--vlm-url` can point to another server;
+cloud inference service. A user-supplied --vlm-url can point to another server;
 the operator of that server is responsible for its privacy behavior.
 
 On first use, CellScope may download open-source runtime components and models
@@ -68,16 +72,17 @@ Face. Those providers receive ordinary network metadata such as IP address,
 user agent and requested artefact. A Hugging Face token, if provided through the
 environment, is used only for the model download.
 
-## 4. Optional dataset upload
+4. OPTIONAL DATASET UPLOAD
+==========================
 
 Upload is disabled until an API URL and email are configured. After the user
 presses Upload, the app:
 
 - creates a signed archive containing the captured JSON, screenshots, signatures
-  and `manifest.json`;
+  and manifest.json;
 - sends a signed enrollment or upload request to the configured Cloudflare
   Worker;
-- uploads the archive and `.sig` directly to a Backblaze B2 bucket using a
+- uploads the archive and .sig directly to a Backblaze B2 bucket using a
   short-lived presigned URL.
 
 The Cloudflare Worker processes and stores in D1:
@@ -95,7 +100,8 @@ The B2 bucket is intended to be private. Uploaded objects include the archive
 and its sidecar, and can contain screenshots, cellular observations, readings
 and pseudonymized Wi-Fi observations.
 
-## 5. Purposes
+5. PURPOSES
+===========
 
 Local processing supports:
 
@@ -112,7 +118,8 @@ Uploaded data supports:
 Uploaded data is not used for advertising, profiling, resale or unrelated
 marketing.
 
-## 6. Security
+6. SECURITY
+===========
 
 CellScope uses:
 
@@ -128,11 +135,12 @@ account and local work directory. Backend operators must protect Worker, D1,
 Brevo and B2 credentials, enable multi-factor authentication and rotate keys
 after any suspected exposure.
 
-## 7. Retention and deletion
+7. RETENTION AND DELETION
+=========================
 
 Local data remains under the user's control until deleted. The user can delete
 local datasets, archives, queue and history files, and reset the device identity.
-**Reset identity** revokes the server-side device identity and removes the local
+Reset identity revokes the server-side device identity and removes the local
 private key.
 
 Uploaded data is controlled by the backend operator. CellScope does not provide
@@ -142,7 +150,8 @@ Object Lock retention and legal obligations may delay or prevent immediate
 deletion. Uploaded datasets should therefore be treated as potentially
 long-lived research records.
 
-## 8. Sharing
+8. SHARING
+==========
 
 CellScope does not sell or rent personal data. Data is shared only with:
 
@@ -155,7 +164,8 @@ CellScope does not sell or rent personal data. Data is shared only with:
 Backend operators must not disclose uploaded datasets except for the research
 purpose, security response, legal obligation or with the user's consent.
 
-## 9. User rights
+9. USER RIGHTS
+==============
 
 Subject to applicable law and the operator's ability to identify a record, users
 may request:
@@ -169,25 +179,29 @@ may request:
 Local data can be deleted directly without contacting the operator. Uploaded
 data requires an operator request because the app has no remote deletion control.
 
-## 10. Children
+10. CHILDREN
+============
 
 CellScope is a technical measurement tool, not a child-directed service. It is
 not intended for use by children without appropriate supervision and consent.
 
-## 11. Global operation
+11. GLOBAL OPERATION
+====================
 
 This contract applies wherever CellScope is used. Data may be processed in the
 regions where Cloudflare, Brevo and Backblaze operate. Backend operators are
 responsible for applying local legal requirements, including any additional
 notice, consent, transfer or retention obligations.
 
-## 12. Changes
+12. CHANGES
+===========
 
 Material changes to this contract must be published with a new version and
 release tag. The version and effective date at the top of this file identify the
 contract that applies to a release.
 
-## 13. Contact
+13. CONTACT
+===========
 
 Privacy questions, access requests and deletion requests should be sent through
 the project's published repository contact channel. Include the device ID or
