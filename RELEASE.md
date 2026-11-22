@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation complete — ready for `release/0.1.0`.
+Released as `v0.1.0`.
 
 ## Planned features
 
@@ -27,8 +27,8 @@ Implementation complete — ready for `release/0.1.0`.
 
 - [x] Feature scope agreed
 - [x] Feature branches merged into `develop`
-- [ ] `release/0.1.0` pushed and all platform builds green
-- [ ] GitHub release `v0.1.0` generated from the release branch
-- [ ] Release branch fast-forwarded into `main`
-- [ ] `main` pushed and release assets refreshed
-- [ ] `main` merged back into `develop`
+- [x] `release/0.1.0` pushed and all platform builds green
+- [x] GitHub release `v0.1.0` generated from the release branch
+- [x] Release branch fast-forwarded into `main`
+- [x] `main` pushed and release assets refreshed
+- [x] `main` merged back into `develop`
