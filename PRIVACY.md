@@ -1,0 +1,198 @@
+# CellScope Global Privacy Contract
+
+Version: v0.1.1  
+Effective date: 2026-11-22
+
+This contract describes the privacy commitments that apply to CellScope on
+macOS, Windows and Linux, and to any CellScope upload backend operated for the
+project. It is based on the behavior implemented in the application source and
+the Cloudflare Worker, not on optional deployment documentation.
+
+## 1. Core commitments
+
+CellScope is designed around five commitments:
+
+1. **Local first.** Cell observations, camera frames, frequency readings,
+   screenshots and training data are processed on the user's device by default.
+2. **No tracking.** The application contains no analytics, telemetry, advertising
+   or behavioural profiling, and does not sell personal data.
+3. **Uploads are explicit.** A dataset is uploaded only after the user configures
+   a backend, enrolls the device and presses Upload.
+4. **Minimum necessary data.** Only the data needed for the research dataset and
+   for upload integrity is transmitted.
+5. **User control.** Local data can be inspected, exported and deleted by the
+   user. The device identity can be revoked.
+
+These commitments do not make uploaded data anonymous. Users must understand
+what an uploaded dataset contains before choosing to upload it.
+
+## 2. Data processed on the device
+
+CellScope may create and retain the following locally:
+
+- cellular observations: PLMN, MCC/MNC, operator name, country, TAC, RAT,
+  eNB/CID, PCI, timing advance, ARFCN, band, bandwidth, carrier aggregation and
+  downlink/uplink frequencies;
+- frequency-counter readings, confidence, backend label and timestamps;
+- webcam screenshots of the frequency counter;
+- observed Wi-Fi SSIDs, pseudonymized with a locally stored random salt, together
+  with RSSI values;
+- dataset JSON, `manifest.json` and SHA-512 `.sig` sidecars;
+- dataset archives and upload queue/history files;
+- application settings, including the optional upload API URL and email address;
+- the Ed25519 device private key, stored in macOS Keychain, Windows DPAPI, or a
+  0600 file on Linux;
+- local logs under the CellScope work directory.
+
+The Wi-Fi transformation is pseudonymization, not a guarantee of anonymity.
+Determined guessing against a known salt or a small set of likely SSIDs may be
+possible. CellScope does not transmit the Wi-Fi salt.
+
+## 3. Local processing and network use
+
+CellScope uses:
+
+- `adb` on the local machine to read the connected Android device;
+- the local webcam through the operating system camera API;
+- a local HTTP bridge on loopback for local VLM inference;
+- libcurl for local model servers and, when the user configures it, the
+  Cloudflare upload API and Backblaze B2.
+
+The application does not send camera frames, readings or cell observations to a
+cloud inference service. A user-supplied `--vlm-url` can point to another server;
+the operator of that server is responsible for its privacy behavior.
+
+On first use, CellScope may download open-source runtime components and models
+from services such as GitHub, Python package indexes, ModelScope and Hugging
+Face. Those providers receive ordinary network metadata such as IP address,
+user agent and requested artefact. A Hugging Face token, if provided through the
+environment, is used only for the model download.
+
+## 4. Optional dataset upload
+
+Upload is disabled until an API URL and email are configured. After the user
+presses Upload, the app:
+
+- creates a signed archive containing the captured JSON, screenshots, signatures
+  and `manifest.json`;
+- sends a signed enrollment or upload request to the configured Cloudflare
+  Worker;
+- uploads the archive and `.sig` directly to a Backblaze B2 bucket using a
+  short-lived presigned URL.
+
+The Cloudflare Worker processes and stores in D1:
+
+- the device ID and Ed25519 public key;
+- the enrolled email address and verification status;
+- upload IDs, archive names and hashes;
+- challenge and upload status, timestamps and nonces.
+
+The Worker uses Brevo to send the enrollment verification email. Brevo receives
+the email address and message content. Cloudflare and Backblaze receive ordinary
+service metadata, including IP address, request timing and object metadata.
+
+The B2 bucket is intended to be private. Uploaded objects include the archive
+and its sidecar, and can contain screenshots, cellular observations, readings
+and pseudonymized Wi-Fi observations.
+
+## 5. Purposes
+
+Local processing supports:
+
+- displaying current cellular and frequency information;
+- local meter recognition and consensus;
+- local datasets, training and export.
+
+Uploaded data supports:
+
+- a research dataset of measurements;
+- device enrollment and integrity checks;
+- verification that an uploaded object is complete and unmodified.
+
+Uploaded data is not used for advertising, profiling, resale or unrelated
+marketing.
+
+## 6. Security
+
+CellScope uses:
+
+- Ed25519 signatures for device-bound requests;
+- nonces and short timestamps to reject replayed requests;
+- SHA-512 hashes and signed sidecars for local integrity;
+- 180-second, single-object B2 presigned upload URLs;
+- server-side object size, hash and sidecar verification;
+- OS-protected device-key storage where available.
+
+No system is perfectly secure. Users should protect their device account, email
+account and local work directory. Backend operators must protect Worker, D1,
+Brevo and B2 credentials, enable multi-factor authentication and rotate keys
+after any suspected exposure.
+
+## 7. Retention and deletion
+
+Local data remains under the user's control until deleted. The user can delete
+local datasets, archives, queue and history files, and reset the device identity.
+**Reset identity** revokes the server-side device identity and removes the local
+private key.
+
+Uploaded data is controlled by the backend operator. CellScope does not provide
+an in-app delete button for objects already stored in B2. Deletion requests must
+be sent through the project's published contact channel. Backups, replication,
+Object Lock retention and legal obligations may delay or prevent immediate
+deletion. Uploaded datasets should therefore be treated as potentially
+long-lived research records.
+
+## 8. Sharing
+
+CellScope does not sell or rent personal data. Data is shared only with:
+
+- the configured Cloudflare Worker and its D1 database;
+- Brevo, for enrollment email delivery;
+- Backblaze B2, for object storage;
+- model/runtime download providers, for the requested artefacts;
+- a user-specified local or remote VLM endpoint, if one is configured.
+
+Backend operators must not disclose uploaded datasets except for the research
+purpose, security response, legal obligation or with the user's consent.
+
+## 9. User rights
+
+Subject to applicable law and the operator's ability to identify a record, users
+may request:
+
+- information about whether their device or email is stored;
+- access to their uploaded data;
+- correction of an incorrect email or device record;
+- deletion of their device record and uploaded objects;
+- withdrawal of consent for future uploads.
+
+Local data can be deleted directly without contacting the operator. Uploaded
+data requires an operator request because the app has no remote deletion control.
+
+## 10. Children
+
+CellScope is a technical measurement tool, not a child-directed service. It is
+not intended for use by children without appropriate supervision and consent.
+
+## 11. Global operation
+
+This contract applies wherever CellScope is used. Data may be processed in the
+regions where Cloudflare, Brevo and Backblaze operate. Backend operators are
+responsible for applying local legal requirements, including any additional
+notice, consent, transfer or retention obligations.
+
+## 12. Changes
+
+Material changes to this contract must be published with a new version and
+release tag. The version and effective date at the top of this file identify the
+contract that applies to a release.
+
+## 13. Contact
+
+Privacy questions, access requests and deletion requests should be sent through
+the project's published repository contact channel. Include the device ID or
+enrolled email address if the request concerns uploaded data.
+
+This contract describes implemented behavior and project commitments. It is not
+a substitute for independent legal advice or a deployment-specific privacy
+notice.
