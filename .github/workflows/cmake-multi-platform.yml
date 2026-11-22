@@ -199,6 +199,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.release_tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: CellScope ${{ steps.release_tag.outputs.tag }}
           body_path: release-notes.md
           files: dist/*
