@@ -80,8 +80,14 @@ The Windows build is produced as an unsigned artifact, then the
    signature is not `Valid`;
 5. repackages the signed zip and replaces the `cellscope-Windows` artifact.
 
-The release job depends on this signing job, so a release build cannot publish
-without valid Windows signatures.
+Signing is attempted on every `main`, `release/**` and `develop` push. If any
+signing step fails, the unsigned Windows package remains in place, the job
+reports `signed=false`, and the release notes contain:
+
+> warning: these binaries have not been code signed
+
+The release still publishes the unsigned Windows binary. This is deliberate:
+signing is best-effort, but unsigned releases are visibly marked.
 
 ## Verification
 
