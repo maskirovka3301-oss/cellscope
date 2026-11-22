@@ -447,6 +447,84 @@ void app_save_settings_modal(App *app)
                app->settings_target);
 }
 
+static void upload_history_path(App *app, char *out, size_t cap)
+{
+    cs_path_join(out, cap, app->capture_dir, "upload-history.tsv");
+}
+
+static void save_upload_history_locked(App *app)
+{
+    char path[CS_PATH_MAX];
+    upload_history_path(app, path, sizeof(path));
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    for (int i = 0; i < app->upload_history_count; i++) {
+        const UploadHistoryEntry *e = &app->upload_history[i];
+        char msg[512];
+        cs_strlcpy(msg, e->message, sizeof(msg));
+        for (char *p = msg; *p; p++) if (*p == '\t' || *p == '\n' || *p == '\r') *p = ' ';
+        fprintf(f, "%lld\t%s\t%s\t%s\n", (long long)e->ts_ms, e->status, e->archive, msg);
+    }
+    fclose(f);
+}
+
+static void load_upload_history(App *app)
+{
+    char path[CS_PATH_MAX];
+    upload_history_path(app, path, sizeof(path));
+    FILE *f = fopen(path, "rb");
+    if (!f) return;
+    char line[2048];
+    while (fgets(line, sizeof(line), f)) {
+        char *fields[4] = {0};
+        int nf = 0;
+        char *start = line;
+        for (char *p = line; nf < 4; p++) {
+            if (*p == '\t' || *p == '\n' || *p == '\r' || *p == '\0') {
+                bool end = *p == '\0';
+                *p = '\0';
+                fields[nf++] = start;
+                if (end) break;
+                start = p + 1;
+            }
+        }
+        char *ts = fields[0], *status = fields[1], *archive = fields[2], *message = fields[3];
+        if (!ts || !status || !archive) continue;
+        int idx = app->upload_history_count;
+        if (idx >= (int)CS_ARRAY_LEN(app->upload_history)) {
+            memmove(&app->upload_history[0], &app->upload_history[1],
+                    sizeof(app->upload_history[0]) * (CS_ARRAY_LEN(app->upload_history) - 1));
+            idx = (int)CS_ARRAY_LEN(app->upload_history) - 1;
+        } else {
+            app->upload_history_count++;
+        }
+        UploadHistoryEntry *e = &app->upload_history[idx];
+        memset(e, 0, sizeof(*e));
+        e->ts_ms = strtoll(ts, NULL, 10);
+        cs_strlcpy(e->status, status, sizeof(e->status));
+        cs_strlcpy(e->archive, archive, sizeof(e->archive));
+        cs_strlcpy(e->message, message ? message : "", sizeof(e->message));
+    }
+    fclose(f);
+}
+
+static void append_upload_history_locked(App *app, const char *status,
+                                         const char *archive, const char *message)
+{
+    if (app->upload_history_count >= (int)CS_ARRAY_LEN(app->upload_history)) {
+        memmove(&app->upload_history[0], &app->upload_history[1],
+                sizeof(app->upload_history[0]) * (CS_ARRAY_LEN(app->upload_history) - 1));
+        app->upload_history_count = (int)CS_ARRAY_LEN(app->upload_history) - 1;
+    }
+    UploadHistoryEntry *e = &app->upload_history[app->upload_history_count++];
+    memset(e, 0, sizeof(*e));
+    e->ts_ms = cs_epoch_ms();
+    cs_strlcpy(e->status, status, sizeof(e->status));
+    cs_strlcpy(e->archive, archive, sizeof(e->archive));
+    cs_strlcpy(e->message, message ? message : "", sizeof(e->message));
+    save_upload_history_locked(app);
+}
+
 void app_enroll_device(App *app)
 {
     char message[512] = {0};
@@ -505,6 +583,8 @@ void app_upload_dataset(App *app)
     bool ok = cloud_upload_archive(api, archive, sig, message, sizeof(message));
     SDL_LockMutex(app->mu);
     cs_strlcpy(app->upload_status, message, sizeof(app->upload_status));
+    append_upload_history_locked(app, ok ? "accepted" : "failed",
+                                 file_basename(archive), message);
     SDL_UnlockMutex(app->mu);
     app_notify(app, !ok, "%s", message);
 }
@@ -1419,6 +1499,7 @@ bool app_init(App *app, SDL_Window *win, SDL_Renderer *ren, char *err, size_t er
         return false;
     }
     cs_path_join(app->log_path, sizeof(app->log_path), app->capture_dir, "cellscope.log");
+    load_upload_history(app);
     find_asset_dir(app);
 
     app->mu = SDL_CreateMutex();
