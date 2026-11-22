@@ -17,7 +17,8 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/tabbed-window-shell` | Add RF Check / Symptom Report tabs and move the complete current window into RF Check; place global Export/Upload/Settings on the right of the tab bar. | `2cd520a` |
 | `feature/dataset-lifecycle-v2` | Start a dataset at app launch, gate RF writes by capture state, stream symptom data, and rotate to a new dataset when an upload is queued. | `db19e94` |
 | `feature/symptom-body-map` | Temporary 2D front/back fallback until 3D is ready; retire it after 3D works. | `e4ec3de` |
-| `feature/anatomy-assets` | Download versioned 3D assets from a separate B2 bucket into the local cache, with SHA-512 verification, progress UI and offline fallback. | |
+| `feature/anatomy-assets` | Download versioned 3D assets from a separate B2 bucket into the local cache, with SHA-512 verification, progress UI and offline fallback. | `734ab32` |
+| `feature/anatomy-b2-presign` | Add a Worker route that signs short-lived GETs for the private anatomy B2 bucket so the read-only key never enters the app. | |
 | `feature/anatomy-renderer` | OpenGL 2.1 3D viewport with orbit/zoom, textured model, male/female side-by-side frontal display, and adaptive LOD selection. | |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | |
 | `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | |
