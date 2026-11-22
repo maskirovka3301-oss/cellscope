@@ -16,7 +16,7 @@ static const char *MSL_FRAG =
     "fragment float4 main0(O i [[stage_in]]){return i.c;}\n";
 #endif
 
-#define MAX_VERTS 8192
+#define MAX_VERTS GPU_UI_MAX_VERTS
 
 typedef GpuUiVertex V;
 
@@ -42,7 +42,8 @@ bool gpu_ui_init(GpuUi *ui, SDL_GPUDevice *gpu, SDL_Window *win, char *err, size
     ui->gpu = gpu;
     ui->win = win;
     ui->verts = calloc(MAX_VERTS, sizeof(V));
-    if (!ui->verts) {
+    ui->clip_ids = calloc(MAX_VERTS, sizeof(int));
+    if (!ui->verts || !ui->clip_ids) {
         snprintf(err, err_cap, "Out of memory");
         return false;
     }
@@ -105,6 +106,7 @@ void gpu_ui_shutdown(GpuUi *ui)
         if (ui->tbo) SDL_ReleaseGPUTransferBuffer(ui->gpu, ui->tbo);
     }
     free(ui->verts);
+    free(ui->clip_ids);
     memset(ui, 0, sizeof(*ui));
 }
 
@@ -114,6 +116,7 @@ bool gpu_ui_begin(GpuUi *ui, int win_w, int win_h, GpuUiRect clear)
     ui->win_w = win_w;
     ui->win_h = win_h;
     ui->count = 0;
+    ui->clip_depth = 0;
     ui->cmd = SDL_AcquireGPUCommandBuffer(ui->gpu);
     if (!ui->cmd) return false;
     return SDL_AcquireGPUSwapchainTexture(ui->cmd, ui->win, &ui->swap, NULL, NULL);
@@ -132,7 +135,28 @@ void gpu_ui_fill_rect(GpuUi *ui, GpuUiRect r)
         {l, t, cr, cg, cb, ca}, {rt, b, cr, cg, cb, ca}, {l, b, cr, cg, cb, ca},
     };
     memcpy(&ui->verts[ui->count], q, sizeof(q));
+    int id = ui->clip_depth > 0 ? ui->clip_depth - 1 : -1;
+    for (int i = 0; i < 6; i++) ui->clip_ids[ui->count + i] = id;
     ui->count += 6;
+}
+
+void gpu_ui_push_clip(GpuUi *ui, GpuUiRect r)
+{
+    if (!ui || ui->clip_depth >= GPU_UI_CLIP_STACK) return;
+    if (ui->clip_depth > 0) {
+        GpuUiRect p = ui->clips[ui->clip_depth - 1];
+        float x0 = r.x > p.x ? r.x : p.x;
+        float y0 = r.y > p.y ? r.y : p.y;
+        float x1 = r.x + r.w < p.x + p.w ? r.x + r.w : p.x + p.w;
+        float y1 = r.y + r.h < p.y + p.h ? r.y + r.h : p.y + p.h;
+        r = (GpuUiRect){x0, y0, x1 > x0 ? x1 - x0 : 0, y1 > y0 ? y1 - y0 : 0};
+    }
+    ui->clips[ui->clip_depth++] = r;
+}
+
+void gpu_ui_pop_clip(GpuUi *ui)
+{
+    if (ui && ui->clip_depth > 0) ui->clip_depth--;
 }
 
 bool gpu_ui_end(GpuUi *ui)
@@ -155,7 +179,24 @@ bool gpu_ui_end(GpuUi *ui)
     SDL_BindGPUGraphicsPipeline(pass, ui->pipeline);
     SDL_GPUBufferBinding binding = {ui->vbo, 0};
     SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-    SDL_DrawGPUPrimitives(pass, ui->count, 1, 0, 0);
+    int start = 0;
+    while (start < ui->count) {
+        int id = ui->clip_ids[start];
+        int end = start;
+        while (end < ui->count && ui->clip_ids[end] == id) end++;
+        SDL_Rect sc = {0, 0, ui->win_w, ui->win_h};
+        if (id >= 0) {
+            GpuUiRect c = ui->clips[id];
+            if (c.w <= 0 || c.h <= 0) { start = end; continue; }
+            sc.x = (int)c.x;
+            sc.y = (int)c.y;
+            sc.w = (int)(c.w + 0.5f);
+            sc.h = (int)(c.h + 0.5f);
+        }
+        SDL_SetGPUScissor(pass, &sc);
+        SDL_DrawGPUPrimitives(pass, end - start, 1, start, 0);
+        start = end;
+    }
     SDL_EndGPURenderPass(pass);
     if (!SDL_SubmitGPUCommandBuffer(ui->cmd)) return false;
     ui->cmd = NULL;

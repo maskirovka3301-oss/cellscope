@@ -20,6 +20,9 @@ int main(void)
     gpu_ui_fill_rect(&ui, (GpuUiRect){20, 60, 280, 300, 16, 23, 31, 255});
     gpu_ui_fill_rect(&ui, (GpuUiRect){340, 60, 280, 300, 16, 23, 31, 255});
     gpu_ui_fill_rect(&ui, (GpuUiRect){40, 80, 90, 28, 69, 224, 160, 255});
+    gpu_ui_push_clip(&ui, (GpuUiRect){20, 60, 120, 120});
+    gpu_ui_fill_rect(&ui, (GpuUiRect){0, 0, 320, 300, 90, 60, 40, 255});
+    gpu_ui_pop_clip(&ui);
     if (!gpu_ui_end(&ui)) return 1;
     SDL_Delay(800);
     gpu_ui_shutdown(&ui);
