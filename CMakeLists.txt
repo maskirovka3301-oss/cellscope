@@ -80,6 +80,7 @@ set(CELLSCOPE_SOURCES
   src/app.c
   src/app_ui.c
   src/symptom_ui.c
+  src/anatomy_assets.c
   src/train.c
   src/ui.c
   src/fonts.c

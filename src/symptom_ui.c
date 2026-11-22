@@ -1,4 +1,5 @@
 #include "symptom_ui.h"
+#include "anatomy_assets.h"
 #include "ui.h"
 
 #include <math.h>
@@ -507,4 +508,38 @@ void symptom_ui_draw(App *app)
         commit_pending(app);
 
     draw_card_list(app, split + 22, 18, w - split - 44, h - 36);
+
+    bool downloading, failed, ready;
+    int percent;
+    char status[256];
+    SDL_LockMutex(app->mu);
+    downloading = app->anatomy_downloading;
+    failed = app->anatomy_failed;
+    ready = app->anatomy_ready;
+    percent = app->anatomy_percent;
+    cs_strlcpy(status, app->anatomy_status, sizeof(status));
+    SDL_UnlockMutex(app->mu);
+    if (downloading || failed) {
+        float by = h - 58;
+        UiRect bar = ui_rect(22, by, left_w - 44, 34);
+        ui_round_rect(ui, bar, 8, UI_PANEL_HI);
+        if (downloading) {
+            ui_text_ellipsis(ui, FONT_MONO, bar.x + 12, bar.y + 8, 9.0f, UI_MUTED,
+                             bar.w - 24, status[0] ? status : "Downloading anatomical model");
+            UiRect track = ui_rect(bar.x + 12, bar.y + 24, bar.w - 24, 3);
+            ui_round_rect(ui, track, 1.5f, UI_BORDER);
+            float frac = (float)(percent < 0 ? 0 : percent > 100 ? 100 : percent) / 100.0f;
+            ui_round_rect(ui, ui_rect(track.x, track.y, track.w * frac, track.h), 1.5f,
+                          UI_ACCENT);
+        } else {
+            ui_text_ellipsis(ui, FONT_MONO, bar.x + 12, bar.y + 8, 9.0f, UI_RED,
+                             bar.w - 100, status[0] ? status : "Anatomy download failed");
+            UiRect retry = ui_rect(bar.x + bar.w - 82, bar.y + 4, 70, 26);
+            if (ui_button(ui, retry, "Retry", BUTTON_SECONDARY, true)) {
+                anatomy_assets_start(app);
+            }
+        }
+    } else if (ready && status[0]) {
+        ui_text(ui, 22, h - 24, 8.5f, UI_FAINT, status);
+    }
 }
