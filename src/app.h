@@ -133,12 +133,28 @@ typedef enum {
 } AppTab;
 
 #define SYMPTOM_MAX_CARDS 64
+#define SYMPTOM_MAX_SUBS 4
+#define SYMPTOM_NAME_MAX 64
+#define SYMPTOM_TEXT_MAX 160
 
 typedef enum {
     SYMPTOM_CARD_WHOLE_BODY = 0,
     SYMPTOM_CARD_NON_PHYSICAL = 1,
     SYMPTOM_CARD_MUSCLE = 2
 } SymptomCardKind;
+
+typedef struct {
+    char name[SYMPTOM_NAME_MAX];
+    char query[SYMPTOM_NAME_MAX];
+    int severity;       /* 0..10 */
+    int onset_hours;    /* 0..24, 0 = now */
+    int duration_hours; /* 0..24 */
+    int frequency;      /* 0 constant, 1 intermittent, 2 occasional */
+    char description[SYMPTOM_TEXT_MAX];
+    char triggers[SYMPTOM_TEXT_MAX];
+    char relief[SYMPTOM_TEXT_MAX];
+    char notes[SYMPTOM_TEXT_MAX];
+} SymptomSubsection;
 
 typedef struct {
     SymptomCardKind kind;
@@ -153,6 +169,9 @@ typedef struct {
     float marker_y;
     bool has_point;
     bool minimized;
+    SymptomSubsection subs[SYMPTOM_MAX_SUBS];
+    int sub_count;
+    int active_sub;
 } SymptomCard;
 
 typedef struct App {
@@ -283,6 +302,10 @@ typedef struct App {
     int active_tab;
     int symptom_focus_card;
     int symptom_scroll;
+    int symptom_edit_card;
+    int symptom_edit_sub;
+    int symptom_edit_field; /* 0 search, 1 description, 2 triggers, 3 relief, 4 notes */
+    int symptom_search_sel;
     SymptomCard symptom_cards[SYMPTOM_MAX_CARDS];
     int symptom_card_count;
     bool anatomy_downloading;

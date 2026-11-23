@@ -1,4 +1,5 @@
 #include "app.h"
+#include "symptom_ui.h"
 #include "cloud.h"
 #include "anatomy_assets.h"
 
@@ -694,6 +695,7 @@ void app_set_tab(App *app, int tab)
     bool leaving_rf = app->active_tab == APP_TAB_RF && tab != APP_TAB_RF;
     app->active_tab = tab;
     bool start_anatomy = tab == APP_TAB_SYMPTOM;
+    bool leaving_symptom = app->active_tab == APP_TAB_SYMPTOM && tab != APP_TAB_SYMPTOM;
     if (leaving_rf) {
         app->modal_open = false;
         app->modal_checking = false;
@@ -701,6 +703,7 @@ void app_set_tab(App *app, int tab)
         app->model_modal_open = false;
     }
     SDL_UnlockMutex(app->mu);
+    if (leaving_symptom) symptom_ui_cancel_edit(app);
     if (start_anatomy) anatomy_assets_start(app);
 }
 
@@ -1561,6 +1564,12 @@ static void readme_fixture_seed(App *app)
         c->point_y = -0.134f;
         c->point_z = 0.172f;
         c->has_point = true;
+        c->sub_count = 1;
+        c->active_sub = 0;
+        cs_strlcpy(c->subs[0].name, "Pain", sizeof(c->subs[0].name));
+        c->subs[0].severity = 6;
+        c->subs[0].onset_hours = 2;
+        c->subs[0].duration_hours = 6;
     }
     SDL_UnlockMutex(app->mu);
 }
@@ -1607,6 +1616,9 @@ bool app_init(App *app, SDL_Window *win, GpuRenderer *r, char *err, size_t err_c
     app->started_ms = cs_now_ms();
     app->paused = !app->autoplay;
     app->symptom_focus_card = -1;
+    app->symptom_edit_card = -1;
+    app->symptom_edit_sub = -1;
+    app->symptom_edit_field = -1;
     if (getenv("CELLSCOPE_START_PAUSED")) app->paused = true;
     if (getenv("CELLSCOPE_AUTOPLAY")) app->paused = false;
     char settings_err[512] = {0};
@@ -3569,6 +3581,10 @@ void app_handle_event(App *app, const SDL_Event *e)
             return;
         }
     }
+    if (app->active_tab == APP_TAB_SYMPTOM && !app->settings_modal_open &&
+        !app->upload_modal_open && symptom_ui_handle_event(app, e))
+        return;
+
     /* Ignore stray mouse events as the window is mapped. */
     if ((e->type == SDL_EVENT_MOUSE_BUTTON_DOWN || e->type == SDL_EVENT_MOUSE_BUTTON_UP) &&
         cs_now_ms() - app->started_ms < 350) {

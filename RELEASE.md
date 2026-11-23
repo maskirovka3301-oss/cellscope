@@ -24,7 +24,7 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/sdl-gpu-3d` | Add the SDL_GPU 3D pipeline, textured male/female models, selection and orbit/zoom. Adaptive mesh LOD remains a performance follow-up. | `35b3233` |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | `85d83a5` |
 | `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | `f5e75b0` |
-| `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, focus-by-circle and card removal. | |
+| `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, card focus and removal. | `c8fb2ff` |
 | `feature/symptom-catalog` | Ship a provisional local symptom catalog and schema-driven controls for fuzzy symptom selection. | |
 | `feature/symptom-report-storage` | Stream one report per dataset to JSON, include it in archives/manifests, and support report-only datasets. | |
 
@@ -163,9 +163,9 @@ Top-level shape:
 }
 ```
 
-Each card records its kind (`region`, `whole_body`, `non_physical`), selected
-regions with view and point, displayed marker, minimized state, and symptom
-subsections with their selected definition and control values.
+Each card records its kind (`muscle`, `whole_body`, `non_physical`), the
+selected muscle/region/side and 3D surface point, minimized state, and symptom
+subsections with their name and control values.
 
 ## SDL_GPU migration
 
@@ -201,8 +201,8 @@ Metal. The migration does not leave SDL_Renderer as a hidden second renderer.
 - Uploading queues the archive and starts a new dataset immediately.
 - Picking a muscle in the 3D viewport adds a side-aware card with its code,
   region and precise surface point.
-- Selecting the same region repeatedly adds cards and non-overlapping circles.
-- Circle focus and card removal behave as specified.
+- Selecting the same muscle repeatedly adds cards.
+- Card focus, minimize and removal behave as specified.
 - Whole-body and non-physical buttons add cards without deleting existing cards.
 - Fuzzy symptom search loads the correct controls and supports multiple subsections.
 - One report per dataset round-trips through JSON and is included in archive/manifest.
