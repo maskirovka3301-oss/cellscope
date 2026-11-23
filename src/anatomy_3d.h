@@ -13,6 +13,7 @@ typedef struct {
     float x, y, z;
     float u, v;
     char region[32];
+    int side; /* 0 female, 1 male */
 } AnatomyPick;
 typedef struct App App;
 
@@ -23,5 +24,6 @@ GpuTexture *anatomy_3d_texture(const Anatomy3D *a);
 int anatomy_3d_selection(const Anatomy3D *a);
 void anatomy_3d_frame(App *app);
 bool anatomy_3d_pick(App *app, float mx, float my, AnatomyPick *out);
+bool anatomy_3d_marker(App *app, float *x, float *y);
 
 #endif

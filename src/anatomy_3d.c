@@ -47,6 +47,8 @@ struct Anatomy3D {
     Uint32 cpu_vert_count, cpu_index_count;
     unsigned char *tex_pixels;
     int tex_w, tex_h;
+    bool has_last;
+    AnatomyPick last;
 };
 
 static void mat_identity(float m[16])
@@ -543,12 +545,42 @@ bool anatomy_3d_pick(App *app, float mx, float my, AnatomyPick *out)
     }
     snprintf(out->code, sizeof(out->code), "%s", code);
     snprintf(out->region, sizeof(out->region), "%s", muscle_region_for_code(code));
+    out->side = best_i >= a->index_offset[1] ? 1 : 0;
     out->x = pos[0];
     out->y = pos[1];
     out->z = pos[2];
     out->u = uv[0];
     out->v = uv[1];
     return true;
+}
+
+bool anatomy_3d_marker(App *app, float *x, float *y)
+{
+    Anatomy3D *a = app->anatomy;
+    if (!a || !a->has_last) return false;
+    float tw = (float)a->target_w, th = (float)a->target_h;
+    if (tw <= 0 || th <= 0) return false;
+    float rad_yaw = a->yaw * 3.14159265f / 180.0f;
+    float rad_pitch = a->pitch * 3.14159265f / 180.0f;
+    float eye[3] = {sinf(rad_yaw) * cosf(rad_pitch) * a->distance,
+                    sinf(rad_pitch) * a->distance,
+                    cosf(rad_yaw) * cosf(rad_pitch) * a->distance};
+    float center[3] = {0, 0, 0}, up[3] = {0, 1, 0};
+    float fwd[3], right[3], cam_up[3];
+    vec3_sub(fwd, center, eye);
+    vec3_norm(fwd);
+    vec3_cross(right, fwd, up);
+    vec3_norm(right);
+    vec3_cross(cam_up, right, fwd);
+    float rel[3] = {a->last.x - eye[0], a->last.y - eye[1], a->last.z - eye[2]};
+    float depth = vec3_dot(rel, fwd);
+    if (depth <= 0.01f) return false;
+    float tan_half = tanf(45.0f * 3.14159265f / 360.0f);
+    float nx = vec3_dot(rel, right) / (depth * tan_half * (tw / th));
+    float ny = vec3_dot(rel, cam_up) / (depth * tan_half);
+    *x = (nx * 0.5f + 0.5f) * tw;
+    *y = (1.0f - (ny * 0.5f + 0.5f)) * th;
+    return *x >= 0 && *y >= 0 && *x < tw && *y < th;
 }
 
 void anatomy_3d_frame(App *app)
@@ -662,7 +694,10 @@ void anatomy_3d_frame(App *app)
     SDL_SubmitGPUCommandBuffer(cmd);
     if (do_pick) {
         AnatomyPick pick;
-        if (anatomy_3d_pick(app, a->press_x, a->press_y, &pick))
+        if (anatomy_3d_pick(app, a->press_x, a->press_y, &pick)) {
+            a->last = pick;
+            a->has_last = true;
             symptom_add_muscle_card(app, &pick);
+        }
     }
 }
