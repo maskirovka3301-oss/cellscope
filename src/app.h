@@ -135,10 +135,9 @@ typedef enum {
 #define SYMPTOM_MAX_CARDS 64
 
 typedef enum {
-    SYMPTOM_CARD_REGION = 0,
-    SYMPTOM_CARD_WHOLE_BODY = 1,
-    SYMPTOM_CARD_NON_PHYSICAL = 2,
-    SYMPTOM_CARD_MUSCLE = 3
+    SYMPTOM_CARD_WHOLE_BODY = 0,
+    SYMPTOM_CARD_NON_PHYSICAL = 1,
+    SYMPTOM_CARD_MUSCLE = 2
 } SymptomCardKind;
 
 typedef struct {
@@ -149,6 +148,7 @@ typedef struct {
     float point_z;
     char code[16];
     char region_name[32];
+    int side;
     float marker_x;
     float marker_y;
     bool has_point;
@@ -281,12 +281,6 @@ typedef struct App {
     uint64_t burst_seq;
     bool paused;
     int active_tab;
-    int symptom_body_view;
-    int symptom_zoom_region;
-    int symptom_pending_region;
-    int64_t symptom_pending_ms;
-    float symptom_pending_x;
-    float symptom_pending_y;
     int symptom_focus_card;
     int symptom_scroll;
     SymptomCard symptom_cards[SYMPTOM_MAX_CARDS];

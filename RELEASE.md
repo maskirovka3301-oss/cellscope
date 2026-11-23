@@ -23,7 +23,7 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | `3df4c0a` |
 | `feature/sdl-gpu-3d` | Add the SDL_GPU 3D pipeline, textured male/female models, selection and orbit/zoom. Adaptive mesh LOD remains a performance follow-up. | `35b3233` |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | `85d83a5` |
-| `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | |
+| `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | `PENDING` |
 | `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, focus-by-circle and card removal. | |
 | `feature/symptom-catalog` | Ship a provisional local symptom catalog and schema-driven controls for fuzzy symptom selection. | |
 | `feature/symptom-report-storage` | Stream one report per dataset to JSON, include it in archives/manifests, and support report-only datasets. | |
@@ -72,7 +72,8 @@ The existing CellScope window remains intact inside the first tab.
 - No front/back selection model: the 3D surface point and rotation replace it.
 - Selected regions highlight on the model.
 - Male/female selection is recorded with the cards.
-- The 2D map remains only as a temporary fallback and is removed once 3D works.
+- The temporary 2D map has been removed; if the 3D model is unavailable the
+  tab shows the anatomy download/error state.
 
 ### 3D rendering and assets
 
@@ -198,7 +199,8 @@ Metal. The migration does not leave SDL_Renderer as a hidden second renderer.
 - RF writes start/stop with capture without rotating the dataset.
 - Symptom edits are visible in JSON immediately.
 - Uploading queues the archive and starts a new dataset immediately.
-- Front and back maps expose 27 and 28 regions and all 55 are selectable.
+- Picking a muscle in the 3D viewport adds a side-aware card with its code,
+  region and precise surface point.
 - Selecting the same region repeatedly adds cards and non-overlapping circles.
 - Circle focus and card removal behave as specified.
 - Whole-body and non-physical buttons add cards without deleting existing cards.
@@ -213,7 +215,7 @@ Metal. The migration does not leave SDL_Renderer as a hidden second renderer.
 - Clicking a muscle returns its painted code and creates a symptom card with a 3D point.
 - The derived code-to-region table is reviewed and corrected before release.
 - Adaptive LOD keeps interaction responsive on modest hardware.
-- The 2D fallback is removed after 3D parity is verified.
+- The 2D fallback has been removed.
 - UI regression covers both tabs, 3D model states and a populated report.
 
 ## Out of scope

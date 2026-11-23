@@ -1550,19 +1550,18 @@ static void readme_fixture_seed(App *app)
         app->readme_fixture_mode == 11)
         app->active_tab = APP_TAB_SYMPTOM;
     if (app->readme_fixture_mode == 10) {
-        app->symptom_body_view = 0;
         app->symptom_card_count = 1;
         app->symptom_focus_card = 0;
         SymptomCard *c = &app->symptom_cards[0];
-        c->kind = SYMPTOM_CARD_REGION;
-        c->region = 11; /* front left knee */
-        c->point_x = 0.42f;
-        c->point_y = 0.67f;
-        c->marker_x = 0.46f;
-        c->marker_y = 0.64f;
+        c->kind = SYMPTOM_CARD_MUSCLE;
+        cs_strlcpy(c->code, "VL", sizeof(c->code));
+        cs_strlcpy(c->region_name, "Thigh", sizeof(c->region_name));
+        c->side = 0;
+        c->point_x = -0.428f;
+        c->point_y = -0.134f;
+        c->point_z = 0.172f;
         c->has_point = true;
     }
-    if (app->readme_fixture_mode == 11) app->symptom_zoom_region = 11;
     SDL_UnlockMutex(app->mu);
 }
 
@@ -1607,8 +1606,6 @@ bool app_init(App *app, SDL_Window *win, GpuRenderer *r, char *err, size_t err_c
     app->r = r;
     app->started_ms = cs_now_ms();
     app->paused = !app->autoplay;
-    app->symptom_zoom_region = -1;
-    app->symptom_pending_region = -1;
     app->symptom_focus_card = -1;
     if (getenv("CELLSCOPE_START_PAUSED")) app->paused = true;
     if (getenv("CELLSCOPE_AUTOPLAY")) app->paused = false;
