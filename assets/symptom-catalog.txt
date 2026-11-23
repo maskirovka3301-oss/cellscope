@@ -1,0 +1,20 @@
+# CellScope provisional symptom catalog
+# Format: label|control,control,...
+# Controls: severity,onset,duration,pattern,description,triggers,relief,notes
+Pain|severity,onset,duration,pattern,description,triggers,relief,notes
+Numbness|severity,onset,duration,pattern,description,triggers
+Tingling / pins and needles|severity,onset,duration,pattern,description,triggers
+Weakness|severity,onset,duration,pattern,description,triggers
+Burning|severity,onset,duration,pattern,description,triggers,relief
+Pressure|severity,onset,duration,pattern,description,triggers,relief
+Swelling|severity,onset,duration,description,triggers,relief
+Stiffness|severity,onset,duration,pattern,description,triggers,relief
+Tremor|severity,onset,duration,pattern,description,triggers
+Headache|severity,onset,duration,pattern,description,triggers,relief,notes
+Dizziness / lightheadedness|severity,onset,duration,pattern,description,triggers
+Vision change|onset,duration,pattern,description,triggers,relief,notes
+Hearing change|onset,duration,pattern,description,triggers,relief,notes
+Nausea|severity,onset,duration,pattern,description,triggers,relief
+Fatigue|severity,onset,duration,pattern,description,triggers,relief
+Anxiety|severity,onset,duration,pattern,description,triggers,relief,notes
+Confusion|severity,onset,duration,pattern,description,triggers,notes

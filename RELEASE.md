@@ -25,7 +25,7 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | `85d83a5` |
 | `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | `f5e75b0` |
 | `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, card focus and removal. | `c8fb2ff` |
-| `feature/symptom-catalog` | Ship a provisional local symptom catalog and schema-driven controls for fuzzy symptom selection. | |
+| `feature/symptom-catalog` | Ship a provisional local symptom catalog and schema-driven controls for fuzzy symptom selection. | `d6a91b9` |
 | `feature/symptom-report-storage` | Stream one report per dataset to JSON, include it in archives/manifests, and support report-only datasets. | |
 
 ## Window and tabs

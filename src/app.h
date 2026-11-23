@@ -146,6 +146,7 @@ typedef enum {
 typedef struct {
     char name[SYMPTOM_NAME_MAX];
     char query[SYMPTOM_NAME_MAX];
+    unsigned controls;
     int severity;       /* 0..10 */
     int onset_hours;    /* 0..24, 0 = now */
     int duration_hours; /* 0..24 */
