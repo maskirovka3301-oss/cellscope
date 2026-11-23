@@ -1,5 +1,6 @@
 #include "app.h"
 #include "symptom_ui.h"
+#include "symptom_catalog.h"
 #include "cloud.h"
 #include "anatomy_assets.h"
 
@@ -1567,6 +1568,8 @@ static void readme_fixture_seed(App *app)
         c->sub_count = 1;
         c->active_sub = 0;
         cs_strlcpy(c->subs[0].name, "Pain", sizeof(c->subs[0].name));
+        const SymptomDef *pain = symptom_catalog_find("Pain");
+        c->subs[0].controls = pain ? pain->controls : SYM_CTRL_ALL;
         c->subs[0].severity = 6;
         c->subs[0].onset_hours = 2;
         c->subs[0].duration_hours = 6;
@@ -1657,6 +1660,9 @@ bool app_init(App *app, SDL_Window *win, GpuRenderer *r, char *err, size_t err_c
     load_upload_history(app);
     load_upload_queue(app);
     find_asset_dir(app);
+    char catalog_err[256] = {0};
+    if (!symptom_catalog_load(app->asset_dir, catalog_err, sizeof(catalog_err)))
+        app_log(app, "%s", catalog_err);
 
     app->mu = SDL_CreateMutex();
     if (!app->mu) {

@@ -1,6 +1,7 @@
 #include "symptom_ui.h"
 #include "anatomy_assets.h"
 #include "anatomy_3d.h"
+#include "symptom_catalog.h"
 #include "ui.h"
 
 #include <ctype.h>
@@ -64,11 +65,6 @@ static void remove_card(App *app, int index)
     }
 }
 
-static const char *kSymptoms[] = {
-    "Pain", "Numbness", "Tingling / pins and needles", "Weakness", "Burning",
-    "Pressure", "Swelling", "Stiffness", "Cramping", "Itching", "Fatigue",
-    "Dizziness", "Tremor", "Blurred vision", "Nausea",
-};
 
 static int fuzzy_score(const char *query, const char *candidate)
 {
@@ -91,11 +87,13 @@ static int fuzzy_score(const char *query, const char *candidate)
 
 static int search_collect(const char *query, const char **out, int max)
 {
-    int scores[16];
-    const char *names[16];
+    int scores[SYMPTOM_CATALOG_MAX];
+    const char *names[SYMPTOM_CATALOG_MAX];
     int count = 0;
-    for (size_t i = 0; i < sizeof(kSymptoms) / sizeof(kSymptoms[0]); i++) {
-        int sc = fuzzy_score(query, kSymptoms[i]);
+    for (int i = 0; i < symptom_catalog_count(); i++) {
+        const SymptomDef *def = symptom_catalog_at(i);
+        if (!def) continue;
+        int sc = fuzzy_score(query, def->name);
         if (sc <= 0) continue;
         int at = count;
         while (at > 0 && scores[at - 1] < sc) {
@@ -104,8 +102,8 @@ static int search_collect(const char *query, const char **out, int max)
             at--;
         }
         scores[at] = sc;
-        names[at] = kSymptoms[i];
-        if (count < 16) count++;
+        names[at] = def->name;
+        if (count < SYMPTOM_CATALOG_MAX) count++;
     }
     if (count > max) count = max;
     for (int i = 0; i < count; i++) out[i] = names[i];
@@ -172,7 +170,16 @@ static float sub_height(App *app, SymptomCard *c, int index)
         const char *results[5];
         h += search_collect(sub->query, results, 5) * 21;
     }
-    if (sub->name[0]) h += 30 + 30 + 34 + 4 * 40 + 12;
+    if (sub->name[0]) {
+        if (sub->controls & SYM_CTRL_SEVERITY) h += 30;
+        if (sub->controls & (SYM_CTRL_ONSET | SYM_CTRL_DURATION)) h += 30;
+        if (sub->controls & SYM_CTRL_PATTERN) h += 34;
+        if (sub->controls & SYM_CTRL_DESCRIPTION) h += 40;
+        if (sub->controls & SYM_CTRL_TRIGGERS) h += 40;
+        if (sub->controls & SYM_CTRL_RELIEF) h += 40;
+        if (sub->controls & SYM_CTRL_NOTES) h += 40;
+        h += 12;
+    }
     return h;
 }
 
@@ -271,6 +278,8 @@ static void draw_card(App *app, SymptomCard *c, int index, UiRect r)
                 if (ui_hit(ui, rr) && ui->mouse_pressed) {
                     cs_strlcpy(ss->name, results[ri], sizeof(ss->name));
                     ss->query[0] = '\0';
+                    const SymptomDef *def = symptom_catalog_find(ss->name);
+                    ss->controls = def ? def->controls : SYM_CTRL_ALL;
                     app->symptom_focus_card = index;
                     end_edit(app);
                     ui_consume_click(ui);
@@ -285,55 +294,70 @@ static void draw_card(App *app, SymptomCard *c, int index, UiRect r)
 
         if (ss->name[0]) {
             float half = (r.w - 36) * 0.5f;
-            UiRect minus = ui_rect(r.x + 14, y, 26, 24);
-            UiRect plus = ui_rect(r.x + 44, y, 26, 24);
-            ui_text_font(ui, FONT_UI, r.x + 80, y + 5, 9.4f, UI_MUTED, "Severity");
             char val[32];
-            snprintf(val, sizeof(val), "%d / 10", ss->severity);
-            ui_text_font(ui, FONT_MONO, r.x + 148, y + 5, 9.4f, UI_TEXT, val);
-            if (ui_button(ui, minus, "−", BUTTON_QUIET, ss->severity > 0))
-                ss->severity--;
-            if (ui_button(ui, plus, "+", BUTTON_QUIET, ss->severity < 10))
-                ss->severity++;
-            y += 30;
-
-            UiRect ominus = ui_rect(r.x + 14, y, 26, 24);
-            UiRect oplus = ui_rect(r.x + 44, y, 26, 24);
-            ui_text_font(ui, FONT_UI, r.x + 80, y + 5, 9.2f, UI_MUTED, "Onset");
-            snprintf(val, sizeof(val), "%dh ago", ss->onset_hours);
-            ui_text_font(ui, FONT_MONO, r.x + 128, y + 5, 9.2f, UI_TEXT, val);
-            if (ui_button(ui, ominus, "−", BUTTON_QUIET, ss->onset_hours > 0))
-                ss->onset_hours--;
-            if (ui_button(ui, oplus, "+", BUTTON_QUIET, ss->onset_hours < 24))
-                ss->onset_hours++;
-
-            UiRect dminus = ui_rect(r.x + half + 18, y, 26, 24);
-            UiRect dplus = ui_rect(r.x + half + 48, y, 26, 24);
-            ui_text_font(ui, FONT_UI, r.x + half + 84, y + 5, 9.2f, UI_MUTED, "Duration");
-            snprintf(val, sizeof(val), "%dh", ss->duration_hours);
-            ui_text_font(ui, FONT_MONO, r.x + half + 146, y + 5, 9.2f, UI_TEXT, val);
-            if (ui_button(ui, dminus, "−", BUTTON_QUIET, ss->duration_hours > 0))
-                ss->duration_hours--;
-            if (ui_button(ui, dplus, "+", BUTTON_QUIET, ss->duration_hours < 24))
-                ss->duration_hours++;
-            y += 30;
-
-            static const char *kFreq[] = {"Constant", "Intermittent", "Occasional"};
-            char flabel[48];
-            snprintf(flabel, sizeof(flabel), "Pattern: %s", kFreq[ss->frequency % 3]);
-            UiRect freq = ui_rect(r.x + 14, y, 166, 24);
-            if (ui_button(ui, freq, flabel, BUTTON_SECONDARY, true)) {
-                ss->frequency = (ss->frequency + 1) % 3;
-                app->symptom_focus_card = index;
+            if (ss->controls & SYM_CTRL_SEVERITY) {
+                UiRect minus = ui_rect(r.x + 14, y, 26, 24);
+                UiRect plus = ui_rect(r.x + 44, y, 26, 24);
+                ui_text_font(ui, FONT_UI, r.x + 80, y + 5, 9.4f, UI_MUTED, "Severity");
+                snprintf(val, sizeof(val), "%d / 10", ss->severity);
+                ui_text_font(ui, FONT_MONO, r.x + 148, y + 5, 9.4f, UI_TEXT, val);
+                if (ui_button(ui, minus, "−", BUTTON_QUIET, ss->severity > 0))
+                    ss->severity--;
+                if (ui_button(ui, plus, "+", BUTTON_QUIET, ss->severity < 10))
+                    ss->severity++;
+                y += 30;
             }
-            y += 34;
 
-            const char *labels[] = {"Description", "Triggers", "Relief", "Notes"};
+            if (ss->controls & (SYM_CTRL_ONSET | SYM_CTRL_DURATION)) {
+                if (ss->controls & SYM_CTRL_ONSET) {
+                    UiRect ominus = ui_rect(r.x + 14, y, 26, 24);
+                    UiRect oplus = ui_rect(r.x + 44, y, 26, 24);
+                    ui_text_font(ui, FONT_UI, r.x + 80, y + 5, 9.2f, UI_MUTED, "Onset");
+                    snprintf(val, sizeof(val), "%dh ago", ss->onset_hours);
+                    ui_text_font(ui, FONT_MONO, r.x + 128, y + 5, 9.2f, UI_TEXT, val);
+                    if (ui_button(ui, ominus, "−", BUTTON_QUIET, ss->onset_hours > 0))
+                        ss->onset_hours--;
+                    if (ui_button(ui, oplus, "+", BUTTON_QUIET, ss->onset_hours < 24))
+                        ss->onset_hours++;
+                }
+                if (ss->controls & SYM_CTRL_DURATION) {
+                    float dx = (ss->controls & SYM_CTRL_ONSET) ? half + 18 : 14;
+                    UiRect dminus = ui_rect(r.x + dx, y, 26, 24);
+                    UiRect dplus = ui_rect(r.x + dx + 30, y, 26, 24);
+                    ui_text_font(ui, FONT_UI, r.x + dx + 66, y + 5, 9.2f, UI_MUTED, "Duration");
+                    snprintf(val, sizeof(val), "%dh", ss->duration_hours);
+                    ui_text_font(ui, FONT_MONO, r.x + dx + 128, y + 5, 9.2f, UI_TEXT, val);
+                    if (ui_button(ui, dminus, "−", BUTTON_QUIET, ss->duration_hours > 0))
+                        ss->duration_hours--;
+                    if (ui_button(ui, dplus, "+", BUTTON_QUIET, ss->duration_hours < 24))
+                        ss->duration_hours++;
+                }
+                y += 30;
+            }
+
+            if (ss->controls & SYM_CTRL_PATTERN) {
+                static const char *kFreq[] = {"Constant", "Intermittent", "Occasional"};
+                char flabel[48];
+                snprintf(flabel, sizeof(flabel), "Pattern: %s", kFreq[ss->frequency % 3]);
+                UiRect freq = ui_rect(r.x + 14, y, 166, 24);
+                if (ui_button(ui, freq, flabel, BUTTON_SECONDARY, true)) {
+                    ss->frequency = (ss->frequency + 1) % 3;
+                    app->symptom_focus_card = index;
+                }
+                y += 34;
+            }
+
+            static const struct { unsigned bit; const char *label; const char *hint; } kFields[] = {
+                {SYM_CTRL_DESCRIPTION, "Description", "Add detail…"},
+                {SYM_CTRL_TRIGGERS, "Triggers", "Add detail…"},
+                {SYM_CTRL_RELIEF, "Relief", "Add detail…"},
+                {SYM_CTRL_NOTES, "Notes", "Anything else?"},
+            };
             char *vals[] = {ss->description, ss->triggers, ss->relief, ss->notes};
             for (int f = 0; f < 4; f++) {
+                if (!(ss->controls & kFields[f].bit)) continue;
                 UiRect fr = ui_rect(r.x + 14, y + 12, r.w - 28, 26);
-                draw_field(app, fr, f + 1, index, si, labels[f], vals[f],
-                           f == 3 ? "Anything else?" : "Add detail…");
+                draw_field(app, fr, f + 1, index, si, kFields[f].label, vals[f], kFields[f].hint);
                 y += 40;
             }
             y += 8;
@@ -441,6 +465,8 @@ bool symptom_ui_handle_event(App *app, const SDL_Event *e)
                     if (idx < 0 || idx >= n) idx = 0;
                     cs_strlcpy(ss->name, results[idx], sizeof(ss->name));
                     ss->query[0] = '\0';
+                    const SymptomDef *def = symptom_catalog_find(ss->name);
+                    ss->controls = def ? def->controls : SYM_CTRL_ALL;
                 }
             }
             end_edit(app);
