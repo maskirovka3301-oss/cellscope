@@ -23,7 +23,7 @@ The existing CellScope window remains intact inside the first tab.
 | `feature/sdl-gpu-ui` | Port all UI primitives, text, rounded surfaces, clipping, batching and modals to SDL_GPU with visual parity. | `3df4c0a` |
 | `feature/sdl-gpu-3d` | Add the SDL_GPU 3D pipeline, textured male/female models, selection and orbit/zoom. Adaptive mesh LOD remains a performance follow-up. | `35b3233` |
 | `feature/anatomy-picking` | Muscle code ID-atlas picking, precise 3D surface points, and derived code-to-body-region mapping for review. | `85d83a5` |
-| `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | `PENDING` |
+| `feature/anatomy-integration` | Replace the 2D map with the 3D viewport and connect picked codes/regions to symptom cards. | `f5e75b0` |
 | `feature/symptom-cards` | Add scrollable symptom cards, multi-symptom subsections, fuzzy search, focus-by-circle and card removal. | |
 | `feature/symptom-catalog` | Ship a provisional local symptom catalog and schema-driven controls for fuzzy symptom selection. | |
 | `feature/symptom-report-storage` | Stream one report per dataset to JSON, include it in archives/manifests, and support report-only datasets. | |
