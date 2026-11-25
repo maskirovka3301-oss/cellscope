@@ -317,6 +317,8 @@ typedef struct App {
     SDL_Thread *anatomy_thread;
     bool session_active;
     bool session_write_failed;
+    bool symptom_report_dirty;
+    bool symptom_write_failed;
     bool silent_export;
     char last_export_archive[CS_PATH_MAX];
     char last_export_sig[CS_PATH_MAX];

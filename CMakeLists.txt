@@ -87,6 +87,7 @@ set(CELLSCOPE_SOURCES
   src/anatomy_3d.c
   src/muscle_codes.c
   src/symptom_catalog.c
+  src/symptom_report.c
   src/fonts.c
   src/proc.c
   src/runtime.c

@@ -1,6 +1,7 @@
 #include "app.h"
 #include "symptom_ui.h"
 #include "symptom_catalog.h"
+#include "symptom_report.h"
 #include "cloud.h"
 #include "anatomy_assets.h"
 
@@ -624,15 +625,16 @@ void app_upload_dataset(App *app)
     cs_strlcpy(api, app->settings.upload_api_url, sizeof(api));
     int sample_count = app->cell_count;
     int reading_count = app->meter_count;
+    int symptom_cards = app->symptom_card_count;
     app->upload_status[0] = '\0';
     app->silent_export = true;
     SDL_UnlockMutex(app->mu);
 
-    if (sample_count == 0 && reading_count == 0) {
+    if (sample_count == 0 && reading_count == 0 && symptom_cards == 0) {
         SDL_LockMutex(app->mu);
         app->silent_export = false;
         cs_strlcpy(app->upload_status,
-                   "Dataset is empty: no cell samples or readings. Nothing was uploaded.",
+                   "Dataset is empty: no cell samples, readings or symptoms. Nothing was uploaded.",
                    sizeof(app->upload_status));
         SDL_UnlockMutex(app->mu);
         app_notify(app, true, "Dataset is empty; nothing was compressed or uploaded.");
@@ -1962,6 +1964,7 @@ bool app_retry_camera(App *app, bool notify)
 
 void app_update(App *app)
 {
+    symptom_report_flush(app);
     if (app->readme_fixture) return;
     int64_t now = cs_now_ms();
 
@@ -3167,21 +3170,25 @@ static bool session_begin_locked(App *app)
     app->session_cell_start = app->cell_seq + 1;
     app->session_meter_start = app->meter_seq + 1;
     app->session_write_failed = false;
+    app->symptom_write_failed = false;
     app->session_active = true;
     session_write_locked(app);
-    return !app->session_write_failed;
+    symptom_report_write_locked(app);
+    return !app->session_write_failed && !app->symptom_write_failed;
 }
 
 static void session_end_locked(App *app)
 {
     if (!app->session_active) return;
     session_write_locked(app);
+    symptom_report_write_locked(app);
     app->session_active = false;
 }
 
 static bool session_rotate_locked(App *app)
 {
     session_end_locked(app);
+    symptom_report_reset_locked(app);
     return session_begin_locked(app);
 }
 
@@ -3404,6 +3411,10 @@ static bool write_dataset_manifest(App *app, const char *dir, const char *name,
     SDL_LockMutex(app->mu);
     int samples = app->cell_count;
     int readings = app->meter_count;
+    int symptom_cards = app->symptom_card_count;
+    int symptom_subs = 0;
+    for (int i = 0; i < app->symptom_card_count; i++)
+        symptom_subs += app->symptom_cards[i].sub_count;
     SDL_UnlockMutex(app->mu);
     char escaped[CS_PATH_MAX * 2];
     cs_json_escape(name, escaped, sizeof(escaped));
@@ -3415,10 +3426,13 @@ static bool write_dataset_manifest(App *app, const char *dir, const char *name,
             "  \"platform\": \"%s\",\n"
             "  \"git_commit\": \"%s\",\n"
             "  \"cell_samples\": %d,\n"
-            "  \"readings\": %d\n"
+            "  \"readings\": %d,\n"
+            "  \"symptom_cards\": %d,\n"
+            "  \"symptom_subsections\": %d,\n"
+            "  \"has_symptom_report\": true\n"
             "}\n",
             escaped, (long long)cs_epoch_ms(), platform, CELLSCOPE_GIT_COMMIT,
-            samples, readings);
+            samples, readings, symptom_cards, symptom_subs);
     bool ok = fclose(f) == 0;
     if (!ok) snprintf(err, err_cap, "Could not finish %s", path);
     return ok;
@@ -3430,11 +3444,13 @@ void app_export_dataset(App *app)
     char name[128] = {0};
     app->last_export_archive[0] = '\0';
     app->last_export_sig[0] = '\0';
+    symptom_report_flush(app);
     SDL_LockMutex(app->mu);
     if (app->session_active) session_write_locked(app);
+    if (app->session_active) symptom_report_write_locked(app);
     cs_strlcpy(dir, app->session_dir, sizeof(dir));
     cs_strlcpy(name, app->session_name, sizeof(name));
-    bool write_failed = app->session_write_failed;
+    bool write_failed = app->session_write_failed || app->symptom_write_failed;
     SDL_UnlockMutex(app->mu);
     if (!dir[0] || !cs_is_dir(dir)) {
         app_notify(app, true, "No current dataset to export. Start a capture first.");
@@ -3443,10 +3459,11 @@ void app_export_dataset(App *app)
     SDL_LockMutex(app->mu);
     int sample_count = app->cell_count;
     int reading_count = app->meter_count;
+    int symptom_cards = app->symptom_card_count;
     SDL_UnlockMutex(app->mu);
-    if (sample_count == 0 && reading_count == 0) {
+    if (sample_count == 0 && reading_count == 0 && symptom_cards == 0) {
         app_notify(app, true,
-                   "Dataset is empty: no cell samples or readings were captured. "
+                   "Dataset is empty: no cell samples, readings or symptoms were captured. "
                    "Nothing was compressed or exported.");
         return;
     }
