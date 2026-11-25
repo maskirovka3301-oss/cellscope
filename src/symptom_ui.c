@@ -2,6 +2,7 @@
 #include "anatomy_assets.h"
 #include "anatomy_3d.h"
 #include "symptom_catalog.h"
+#include "symptom_report.h"
 #include "ui.h"
 
 #include <ctype.h>
@@ -32,6 +33,7 @@ static void add_card(App *app, SymptomCardKind kind)
     c->subs[0].frequency = 0;
     app->symptom_focus_card = app->symptom_card_count;
     app->symptom_card_count++;
+    symptom_report_mark_dirty(app);
 }
 
 void symptom_add_muscle_card(App *app, const AnatomyPick *pick)
@@ -57,6 +59,7 @@ static void remove_card(App *app, int index)
     app->symptom_card_count--;
     if (app->symptom_focus_card >= app->symptom_card_count)
         app->symptom_focus_card = app->symptom_card_count - 1;
+    symptom_report_mark_dirty(app);
     if (app->symptom_edit_card == index) {
         app->symptom_edit_card = -1;
         app->symptom_edit_sub = -1;
@@ -426,6 +429,7 @@ bool symptom_ui_handle_event(App *app, const SDL_Event *e)
 {
     if (!app || !e) return false;
     if (app->symptom_edit_card < 0) return false;
+    symptom_report_mark_dirty(app);
     if (e->type == SDL_EVENT_TEXT_INPUT) {
         char *buf = edit_buffer(app);
         if (!buf) return true;
@@ -494,6 +498,7 @@ bool symptom_ui_handle_event(App *app, const SDL_Event *e)
 void symptom_ui_draw(App *app)
 {
     Ui *ui = &app->ui;
+    bool interacted = ui->mouse_pressed;
     float w = (float)ui->win_w, h = (float)ui->view_h;
     float split = w * 0.5f;
     float left_w = split;
@@ -572,4 +577,5 @@ void symptom_ui_draw(App *app)
     } else if (ready && status[0]) {
         ui_text(ui, 22, h - 24, 8.5f, UI_FAINT, status);
     }
+    if (interacted) symptom_report_mark_dirty(app);
 }
